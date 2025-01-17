@@ -10,10 +10,18 @@
     "rollout-next": "npm run build && npm version prerelease --preid=next && npm publish --tag next",
     "prepare": "npm link adminforth"
   },
-  "keywords": [],
-  "author": "",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/devforth/adminforth-i18n.git"
+  },
+  "keywords": [
+    "i18n",
+    "adminforth",
+    "translation"
+  ],
+  "author": "devforth",
   "license": "ISC",
-  "description": "",
+  "description": "Internationalization plugin for Adminforth projects",
   "dependencies": {
     "@aws-sdk/client-ses": "^3.654.0",
     "@sapphire/async-queue": "^1.5.5",
