@@ -25,7 +25,8 @@ steps:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     commands:
-      - apk add --no-cache rsync
+      # install rsync
+      - apt update && apt install -y rsync
       - export $(cat /woodpecker/deploy.vault.env | xargs)
       - npm clean-install
       - /bin/bash ./.woodpecker/buildRelease.sh
