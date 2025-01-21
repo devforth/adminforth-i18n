@@ -204,14 +204,26 @@ export default class I18nPlugin extends AdminForthPlugin {
       }
 
       // if showIn is not defined, add it as empty
-      column.showIn = [];
+      column.showIn = {
+        show: false,
+        list: false,
+        edit: false,
+        create: false,
+        filter: false,
+      };
 
       // add virtual field for incomplete
       resourceConfig.columns.unshift({
         name: 'fully_translated',
         label: 'Fully translated',
         virtual: true,
-        showIn: ['list', 'show', 'filter'],
+        showIn: {
+          show: true,
+          list: true,
+          edit: false,
+          create: false,
+          filter: true,
+        },
         type: AdminForthDataTypes.BOOLEAN,
       });
     }
