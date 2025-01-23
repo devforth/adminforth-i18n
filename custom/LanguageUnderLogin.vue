@@ -61,16 +61,6 @@ const options = computed(() => {
 });
 
 onMounted(() => {
-  console.log('LanguageUnderLogin mounted', props.meta.supportedLanguages);
   selectedLanguage.value = getLocalLang(props.meta.supportedLanguages);
-  setLang({ setLocaleMessage, locale }, props.meta.pluginInstanceId, selectedLanguage.value);
-  // todo this mounted executed only on this component mount, f5 from another page apart login will not read it
 });
-
-
-
-
-
-
-
 </script>

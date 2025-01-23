@@ -250,6 +250,11 @@ export default class I18nPlugin extends AdminForthPlugin {
       meta: compMeta
     });
 
+    adminforth.config.customization.globalInjections.everyPageBottom.push({
+      file: this.componentPath('LanguageEveryPageLoader.vue'),
+      meta: compMeta
+    });
+
     // disable create allowedActions for translations
     resourceConfig.options.allowedActions.create = false;
 
