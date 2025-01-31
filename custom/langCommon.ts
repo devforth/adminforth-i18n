@@ -1,7 +1,9 @@
 
 import { callAdminForthApi } from '@/utils';
 import dayjsLocales from './dayjsLocales';
+import datepickerLocales from './datepickerLocales';
 import dayjs from 'dayjs';
+import Datepicker from "flowbite-datepicker/Datepicker";
 
 
 const messagesCache: Record<
@@ -42,6 +44,14 @@ export async function setLang({ setLocaleMessage, locale }: any, pluginInstanceI
         dayjs.locale(langIso);
     } catch {
         dayjs.locale('en');
+    }
+
+    // set datepicker locale
+    if (datepickerLocales[langIso]) {
+        Datepicker.locales[langIso] = (await datepickerLocales[langIso]).default[langIso];
+    } else if (Object.keys(datepickerLocales).some((l) => l.startsWith(`${langIso}-`)) && langIso !== 'en') {
+        const lang = Object.keys(datepickerLocales).find((l) => l.startsWith(`${langIso}-`));
+        Datepicker.locales[langIso] = (await datepickerLocales[lang]).default[lang];
     }
     
     // set locale and locale message
