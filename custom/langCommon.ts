@@ -1,5 +1,7 @@
 
 import { callAdminForthApi } from '@/utils';
+import dayjsLocales from './dayjsLocales';
+import dayjs from 'dayjs';
 
 
 const messagesCache: Record<
@@ -32,6 +34,14 @@ export async function setLang({ setLocaleMessage, locale }: any, pluginInstanceI
             ts: Date.now(),
             messages: messages
         };
+    }
+
+    // set dayjs locale
+    try {
+        await dayjsLocales[langIso];
+        dayjs.locale(langIso);
+    } catch {
+        dayjs.locale('en');
     }
     
     // set locale and locale message
