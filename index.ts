@@ -165,6 +165,21 @@ export default class I18nPlugin extends AdminForthPlugin {
         throw new Error(`Field ${this.trFieldNames[lang]} not found for storing translation for language ${lang}
            in resource ${resourceConfig.resourceId}, consider adding it to columns or change trFieldNames option to remap it to existing column`);
       }
+
+      column.components = column.components || {};
+      
+      // set edit and create custom component - SingleMultiInput.vue
+      column.components.edit = {
+        file: this.componentPath('SingleMultiInput.vue'),
+      };
+      column.components.create = {
+        file: this.componentPath('SingleMultiInput.vue'),
+      };
+
+      // set ListCell for list
+      column.components.list = {
+        file: this.componentPath('ListCell.vue'),
+      };
     }
 
     this.enFieldName = this.trFieldNames['en'] || 'en_string';
@@ -186,6 +201,16 @@ export default class I18nPlugin extends AdminForthPlugin {
       throw new Error(`Field ${this.enFieldName} not found column to store english original string in resource ${resourceConfig.resourceId}`);
     }
 
+    enColumn.components = enColumn.components || {};
+    enColumn.components.edit = {
+      file: this.componentPath('SingleMultiInput.vue'),
+    };
+    enColumn.components.create = {
+      file: this.componentPath('SingleMultiInput.vue'),
+    };
+    enColumn.components.list = {
+      file: this.componentPath('ListCell.vue'),
+    };
     enColumn.editReadonly = true;
 
     // if sourceFieldName defined, check it exists
