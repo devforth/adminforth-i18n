@@ -1,9 +1,10 @@
 {
   "name": "@adminforth/i18n",
-  "version": "1.0.23",
+  "version": "1.0.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
+  "homepage": "https://adminforth.dev/docs/tutorial/Plugins/i18n/",
   "scripts": {
     "build": "tsc && rsync -av --exclude 'node_modules' custom dist/",
     "prepare": "npm link adminforth"
@@ -15,11 +16,14 @@
   "keywords": [
     "i18n",
     "adminforth",
-    "translation"
+    "translation",
+    "internationalization",
+    "language",
+    "vue-i18n"
   ],
   "author": "devforth",
   "license": "ISC",
-  "description": "Internationalization plugin for Adminforth projects",
+  "description": "Internationalization/translation plugin for AdminForth",
   "dependencies": {
     "@aws-sdk/client-ses": "^3.654.0",
     "@sapphire/async-queue": "^1.5.5",
