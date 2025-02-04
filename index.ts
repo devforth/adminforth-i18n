@@ -742,70 +742,70 @@ JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object =>
     // in this plugin we will use plugin to fill the database with missing language messages
     if (!this.externalAppOnly) {
       this.tryProcessAndWatch(adminforth);
-    }
 
-    adminforth.tr = async (msg: string | null | undefined, category: string, lang: string, params, pluralizationNumber: number): Promise<string> => {
-      if (!msg) {
-        return msg;
-      }
-
-      if (category === 'frontend') {
-        throw new Error(`Category 'frontend' is reserved for frontend messages, use any other category for backend messages`);
-      }
-      // console.log('🪲tr', msg, category, lang);
-
-      // if lang is not supported , throw
-      if (!this.options.supportedLanguages.includes(lang as LanguageCode)) {
-        lang = 'en'; // for now simply fallback to english
-
-        // throwing like line below might be too strict, e.g. for custom apis made with fetch which don't pass accept-language
-        // throw new Error(`Language ${lang} is not entered to be supported by requested by browser in request headers accept-language`);
-      }
-
-      let result;
-      // try to get translation from cache
-      const cacheKey = `${resourceConfig.resourceId}:${category}:${lang}:${msg}`;
-      const cached = await this.cache.get(cacheKey);
-      if (cached) {
-        result = cached;
-      }
-      if (!result) {
-        const resource = adminforth.resource(resourceConfig.resourceId);
-        const translation = await resource.get([Filters.EQ(this.enFieldName, msg), Filters.EQ(this.options.categoryFieldName, category)]);
-        if (!translation) {
-          await resource.create({
-            [this.enFieldName]: msg,
-            [this.options.categoryFieldName]: category,
-          });
-          this.updateUntranslatedMenuBadge();
+      adminforth.tr = async (msg: string | null | undefined, category: string, lang: string, params, pluralizationNumber: number): Promise<string> => {
+        if (!msg) {
+          return msg;
         }
 
-        // do this check here, to faster register missing translations
-        // also not cache it - no sense to cache english strings
-        if (lang === 'en') {
-          // set to cache to return faster next time
-          result = msg;
-        } else {
-          result = translation?.[this.trFieldNames[lang]];
-          if (!result) {
-            // return english
+        if (category === 'frontend') {
+          throw new Error(`Category 'frontend' is reserved for frontend messages, use any other category for backend messages`);
+        }
+        // console.log('🪲tr', msg, category, lang);
+
+        // if lang is not supported , throw
+        if (!this.options.supportedLanguages.includes(lang as LanguageCode)) {
+          lang = 'en'; // for now simply fallback to english
+
+          // throwing like line below might be too strict, e.g. for custom apis made with fetch which don't pass accept-language
+          // throw new Error(`Language ${lang} is not entered to be supported by requested by browser in request headers accept-language`);
+        }
+
+        let result;
+        // try to get translation from cache
+        const cacheKey = `${resourceConfig.resourceId}:${category}:${lang}:${msg}`;
+        const cached = await this.cache.get(cacheKey);
+        if (cached) {
+          result = cached;
+        }
+        if (!result) {
+          const resource = adminforth.resource(resourceConfig.resourceId);
+          const translation = await resource.get([Filters.EQ(this.enFieldName, msg), Filters.EQ(this.options.categoryFieldName, category)]);
+          if (!translation) {
+            await resource.create({
+              [this.enFieldName]: msg,
+              [this.options.categoryFieldName]: category,
+            });
+            this.updateUntranslatedMenuBadge();
+          }
+
+          // do this check here, to faster register missing translations
+          // also not cache it - no sense to cache english strings
+          if (lang === 'en') {
+            // set to cache to return faster next time
             result = msg;
+          } else {
+            result = translation?.[this.trFieldNames[lang]];
+            if (!result) {
+              // return english
+              result = msg;
+            }
+          }
+          // cache so even if key does not exist, we will not hit database
+          await this.cache.set(cacheKey, result);
+        }
+        // if msg has '|' in it, then we need to aplly pluralization
+        if (msg.includes('|')) {
+          result = this.applyPluralization(result, pluralizationNumber, lang);
+        }
+
+        if (params) {
+          for (const [key, value] of Object.entries(params)) {
+            result = result.replace(`{${key}}`, value);
           }
         }
-        // cache so even if key does not exist, we will not hit database
-        await this.cache.set(cacheKey, result);
+        return result;
       }
-      // if msg has '|' in it, then we need to aplly pluralization
-      if (msg.includes('|')) {
-        result = this.applyPluralization(result, pluralizationNumber, lang);
-      }
-
-      if (params) {
-        for (const [key, value] of Object.entries(params)) {
-          result = result.replace(`{${key}}`, value);
-        }
-      }
-      return result;
     }
   }
 
