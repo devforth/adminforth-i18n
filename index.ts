@@ -94,6 +94,8 @@ export default class I18nPlugin extends AdminForthPlugin {
 
   adminforth: IAdminForth;
 
+  externalAppOnly: boolean;
+
   // sorted by name list of all supported languages, without en e.g. 'al|ro|uk'
   fullCompleatedFieldValue: string;
 
@@ -140,7 +142,8 @@ export default class I18nPlugin extends AdminForthPlugin {
         throw new Error(`Invalid language code ${lang}, please define valid ISO 639-1 language code (2 lowercase letters)`);
       }
     });
-    
+
+    this.externalAppOnly = this.options.externalAppOnly === true;
 
     // find primary key field
     this.primaryKeyFieldName = resourceConfig.columns.find(c => c.primaryKey)?.name;
@@ -265,20 +268,22 @@ export default class I18nPlugin extends AdminForthPlugin {
       ))
     };
     // add underLogin component
-    (adminforth.config.customization.loginPageInjections.underInputs).push({ 
-      file: this.componentPath('LanguageUnderLogin.vue'),
-      meta: compMeta
-    });
+    if (!this.externalAppOnly) {
+      (adminforth.config.customization.loginPageInjections.underInputs).push({ 
+        file: this.componentPath('LanguageUnderLogin.vue'),
+        meta: compMeta
+      });
 
-    (adminforth.config.customization.globalInjections.userMenu).push({
-      file: this.componentPath('LanguageInUserMenu.vue'),
-      meta: compMeta
-    });
+      (adminforth.config.customization.globalInjections.userMenu).push({
+        file: this.componentPath('LanguageInUserMenu.vue'),
+        meta: compMeta
+      });
 
-    adminforth.config.customization.globalInjections.everyPageBottom.push({
-      file: this.componentPath('LanguageEveryPageLoader.vue'),
-      meta: compMeta
-    });
+      adminforth.config.customization.globalInjections.everyPageBottom.push({
+        file: this.componentPath('LanguageEveryPageLoader.vue'),
+        meta: compMeta
+      });
+    }
 
     // disable create allowedActions for translations
     resourceConfig.options.allowedActions.create = false;
@@ -735,7 +740,9 @@ JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object =>
     }
 
     // in this plugin we will use plugin to fill the database with missing language messages
-    this.tryProcessAndWatch(adminforth);
+    if (!this.externalAppOnly) {
+      this.tryProcessAndWatch(adminforth);
+    }
 
     adminforth.tr = async (msg: string | null | undefined, category: string, lang: string, params, pluralizationNumber: number): Promise<string> => {
       if (!msg) {
