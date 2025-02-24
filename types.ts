@@ -36,4 +36,10 @@ export interface PluginOptions {
    * semiautomatically (creates a bulk action for generating translations)
    */
   completeAdapter?: CompletionAdapter
+
+  /**
+   * Optionally translation plugin available to translate only external applications (like SEO-facing or user-facing services),
+   *  not AdminForth applications
+   */
+  externalAppOnly?: boolean;
 }
