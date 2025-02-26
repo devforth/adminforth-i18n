@@ -647,14 +647,17 @@ JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object =>
     );
 
     for (const lang of langsInvolved) {
-      await this.cache.clear(`${this.resourceConfig.resourceId}:frontend:${lang}`);
+      const categoriesInvolved = new Set();
       for (const { enStr, category } of Object.values(updateStrings)) {
+        categoriesInvolved.add(category);
         await this.cache.clear(`${this.resourceConfig.resourceId}:${category}:${lang}:${enStr}`);
+      }
+      for (const category of categoriesInvolved) {
+        await this.cache.clear(`${this.resourceConfig.resourceId}:${category}:${lang}`);
       }
     }
 
     return new Set(totalTranslated).size;
-
   }
 
   async processExtractedMessages(adminforth: IAdminForth, filePath: string) {
@@ -703,7 +706,6 @@ JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object =>
       process.env.HEAVY_DEBUG && console.log('🪲🔔messagesFile add', messagesFile);
       this.processExtractedMessages(adminforth, messagesFile);
     });
-
   }
   
   validateConfigAfterDiscover(adminforth: IAdminForth, resourceConfig: AdminForthResource) {
