@@ -410,7 +410,7 @@ export default class I18nPlugin extends AdminForthPlugin {
           // if optional `confirm` is provided, user will be asked to confirm action
           confirm: 'Are you sure you want to translate selected items?',
           allowed: async ({ resource, adminUser, selectedIds, allowedActions }) => {
-            console.log('allowedActions', JSON.stringify(allowedActions));
+            process.env.HEAVY_DEBUG && console.log('allowedActions', JSON.stringify(allowedActions));
             return allowedActions.edit;
           },
           action: async ({ selectedIds, tr }) => {
@@ -509,8 +509,7 @@ JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object =>
       prompt.length * 2,
     );
 
-    console.log(`🪲🔪LLM resp >> ${prompt.length}, <<${resp.content.length} :\n\n`, JSON.stringify(resp));
-
+    process.env.HEAVY_DEBUG && console.log(`🪲🔪LLM resp >> ${prompt.length}, <<${resp.content.length} :\n\n`, JSON.stringify(resp));
 
     if (resp.error) {
       throw new AiTranslateError(resp.error);
