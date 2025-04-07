@@ -409,7 +409,6 @@ export default class I18nPlugin extends AdminForthPlugin {
           icon: 'flowbite:language-outline',
           // if optional `confirm` is provided, user will be asked to confirm action
           confirm: 'Are you sure you want to translate selected items?',
-          state: 'selected',
           allowed: async ({ resource, adminUser, selectedIds, allowedActions }) => {
             console.log('allowedActions', JSON.stringify(allowedActions));
             return allowedActions.edit;
@@ -507,8 +506,10 @@ JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object =>
     const resp = await this.options.completeAdapter.complete(
       prompt,
       [],
-      300,
+      prompt.length * 2,
     );
+
+    console.log(`🪲🔪LLM resp >> ${prompt.length}, <<${resp.content.length} :\n\n`, JSON.stringify(resp));
 
 
     if (resp.error) {
@@ -803,7 +804,9 @@ JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object =>
 
         if (params) {
           for (const [key, value] of Object.entries(params)) {
-            result = result.replace(`{${key}}`, value);
+            if (result) {
+              result = result.replace(`{${key}}`, value);
+            }
           }
         }
         return result;
