@@ -245,6 +245,9 @@ export default class I18nPlugin extends AdminForthPlugin {
         name: 'fully_translated',
         label: 'Fully translated',
         virtual: true,
+        filterOptions: {
+          multiselect: false,
+        },
         showIn: {
           show: true,
           list: true,
