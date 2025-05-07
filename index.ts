@@ -498,9 +498,9 @@ export default class I18nPlugin extends AdminForthPlugin {
     const requestSlavicPlurals = Object.keys(SLAVIC_PLURAL_EXAMPLES).includes(lang) && plurals;
 
     const prompt = `
-I need to translate strings in JSON to ${lang} (${langName}) language from English for my web app.
+I need to translate strings in JSON to ${langName} language (ISO 639-1 code ${lang}) from English for my web app.
 ${requestSlavicPlurals ? `You should provide 4 slavic forms (in format "zero count | singular count | 2-4 | 5+") e.g. "apple | apples" should become "${SLAVIC_PLURAL_EXAMPLES[lang]}"` : ''}
-Keep keys, as is, write translation into values! Here are the strings:
+Keep keys, as is, write translation into values! If keys have variables (in curly brackets), then translated strings should have them as well (variables itself should not be translated). Here are the strings:
 
 \`\`\`json
 ${
@@ -512,6 +512,8 @@ JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object =>
 \`\`\`
 `;  
 
+    process.env.HEAVY_DEBUG && console.log(`🪲🔪LLM prompt >> ${prompt.length}, <<${prompt} :\n\n`, JSON.stringify(prompt));
+
     // call OpenAI
     const resp = await this.options.completeAdapter.complete(
       prompt,
@@ -520,7 +522,7 @@ JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object =>
     );
 
     process.env.HEAVY_DEBUG && console.log(`🪲🔪LLM resp >> ${prompt.length}, <<${resp.content.length} :\n\n`, JSON.stringify(resp));
-
+    
     if (resp.error) {
       throw new AiTranslateError(resp.error);
     }
