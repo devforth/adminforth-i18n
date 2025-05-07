@@ -1,7 +1,12 @@
 <template>
-  <div class="relative group flex items-center" @click.stop>
+  <div class="relative group flex items-center">
     <!-- Normal value display -->
-    <div v-if="!isEditing" class="flex items-center" :class="limitedText?.length > 50 ? 'min-w-48 max-w-full' : 'min-w-32'">
+    <div v-if="column.editReadonly" class="flex items-center" :class="limitedText?.length > 50 ? 'min-w-48 max-w-full' : 'min-w-32'">
+      {{ limitedText? limitedText : '-' }}
+    </div>
+
+    <div @click.stop="startEdit()"
+      v-else-if="!isEditing" class="flex items-center" :class="limitedText?.length > 50 ? 'min-w-48 max-w-full' : 'min-w-32'">
       {{ limitedText? limitedText : '-' }}
 
       <span v-if="meta?.reviewedCheckboxesFieldName && limitedText" class="flex items-center ml-2">
@@ -31,7 +36,7 @@
     </div>
 
     <!-- Edit mode -->
-     <div v-else class="flex flex-col gap-2">
+     <div v-else class="flex flex-col gap-2" @click.stop>
       <div class="flex items-center max-w-full gap-2"
         :class="limitedText?.length > 50 ? 'min-w-72' : 'min-w-64'"
         ref="inputHolder"
