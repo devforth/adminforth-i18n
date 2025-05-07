@@ -42,4 +42,11 @@ export interface PluginOptions {
    *  not AdminForth applications
    */
   externalAppOnly?: boolean;
+
+
+  /**
+   * You can enable "Reviewed" checkbox for each translation string by defing this field,
+   * it should be a JSON field (underlyng database type should be TEXT or JSON)
+   */
+  reviewedCheckboxesFieldName?: string;
 }

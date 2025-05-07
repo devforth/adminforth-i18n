@@ -1,4 +1,4 @@
-import AdminForth, { AdminForthPlugin, Filters, suggestIfTypo, AdminForthDataTypes } from "adminforth";
+import AdminForth, { AdminForthPlugin, Filters, suggestIfTypo, AdminForthDataTypes, RAMLock } from "adminforth";
 import type { IAdminForth, IHttpServer, AdminForthComponentDeclaration, AdminForthResourceColumn, AdminForthResource, BeforeLoginConfirmationFunction, AdminForthConfigMenuItem } from "adminforth";
 import type { PluginOptions } from './types.js';
 import iso6391, { LanguageCode } from 'iso-639-1';
@@ -6,6 +6,8 @@ import path from 'path';
 import fs from 'fs-extra';
 import chokidar from 'chokidar';
 import  { AsyncQueue } from '@sapphire/async-queue';
+
+
 console.log = (...args) => {
   process.stdout.write(args.join(" ") + "\n");
 };
@@ -182,6 +184,11 @@ export default class I18nPlugin extends AdminForthPlugin {
       // set ListCell for list
       column.components.list = {
         file: this.componentPath('ListCell.vue'),
+        meta: {
+          pluginInstanceId: this.pluginInstanceId,
+          lang,
+          reviewedCheckboxesFieldName: this.options.reviewedCheckboxesFieldName,
+        },
       };
     }
 
@@ -732,6 +739,19 @@ JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object =>
       }
     }
 
+    if (this.options.reviewedCheckboxesFieldName) {
+      // ensure type is JSON
+      const column = resourceConfig.columns.find(c => c.name === this.options.reviewedCheckboxesFieldName);
+      if (!column) {
+        const similar = suggestIfTypo(resourceConfig.columns.map((col) => col.name), this.options.reviewedCheckboxesFieldName);
+        throw new Error(`Field ${this.options.reviewedCheckboxesFieldName} not found in resource ${resourceConfig.resourceId}${similar ? `Did you mean '${similar}'?` : ''}`);
+      }
+      if (column.type !== AdminForthDataTypes.JSON) {
+        throw new Error(`Field ${this.options.reviewedCheckboxesFieldName} should be of type JSON in resource ${resourceConfig.resourceId}, but it is ${column.type}`);
+      }
+    }
+
+
     // ensure categoryFieldName defined and is string
     if (!this.options.categoryFieldName) {
       throw new Error(`categoryFieldName option is not defined. It is used to categorize translations and return only specific category e.g. to frontend`);
@@ -937,6 +957,57 @@ JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object =>
         const translations = await this.getCategoryTranslations('frontend', lang);
         return translations;
 
+      }
+    });
+
+    const lock = new RAMLock();
+
+    server.endpoint({
+      method: 'POST',
+      path: `/plugin/${this.pluginInstanceId}/update-field`,
+      handler: async ({ body, adminUser, headers }) => {
+        const { resourceId, recordId, field, value, reviewed } = body;
+
+        const resource = this.adminforth.config.resources.find(r => r.resourceId === resourceId);
+        // Create update object with just the single field
+        const updateRecord = { [field]: value };
+        
+        // Use AdminForth's built-in update method
+        const connector = this.adminforth.connectors[resource.dataSource];
+
+        let oldRecord;
+        let result;
+        await lock.run(`edit-trans-${recordId}`,  async () => {
+          // put into lock so 2 editors will not update the same record at the same time
+          oldRecord = await connector.getRecordByPrimaryKey(resource, recordId)
+
+          if (this.options.reviewedCheckboxesFieldName) {
+            let oldValue;
+            if (!oldRecord[this.options.reviewedCheckboxesFieldName]) {
+              oldValue = {}
+            } else {
+              oldValue = {...oldRecord[this.options.reviewedCheckboxesFieldName]};
+            }
+            oldValue[field] = reviewed;
+            updateRecord[this.options.reviewedCheckboxesFieldName] = { ...oldValue };
+          }
+
+          result = await this.adminforth.updateResourceRecord({
+            resource,
+            recordId,
+            record: updateRecord,
+            oldRecord,
+            adminUser
+          });
+        });
+
+        if (result.error) {
+          return { error: result.error };
+        }
+
+        const updatedRecord = await connector.getRecordByPrimaryKey(resource, recordId);
+
+        return { record: updatedRecord };
       }
     });
 
