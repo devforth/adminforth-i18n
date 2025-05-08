@@ -1,5 +1,5 @@
 <template>
-  <div class="relative group flex items-center">
+  <div class="relative group flex items-center" ref="listCell">
     <!-- Normal value display -->
     <div v-if="column.editReadonly" class="flex items-center" :class="limitedText?.length > 50 ? 'min-w-48 max-w-full' : 'min-w-32'">
       {{ limitedText? limitedText : '-' }}
@@ -36,7 +36,7 @@
     </div>
 
     <!-- Edit mode -->
-     <div v-else class="flex flex-col gap-2" @click.stop>
+     <div v-else class="flex flex-col gap-2 trans-editor" @click.stop>
       <div class="flex items-center max-w-full gap-2"
         :class="limitedText?.length > 50 ? 'min-w-72' : 'min-w-64'"
         ref="inputHolder"
@@ -86,7 +86,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, Ref, computed, nextTick } from 'vue';
+import { ref, Ref, computed, nextTick, onMounted } from 'vue';
 import { IconPenSolid, IconCheckOutline, IconXOutline, IconQuestionCircleSolid } from '@iconify-prerendered/vue-flowbite';
 import { callAdminForthApi } from '@/utils';
 import { showErrorTost, showSuccesTost } from '@/composables/useFrontendApi';
@@ -94,7 +94,9 @@ import ColumnValueInputWrapper from '@/components/ColumnValueInputWrapper.vue';
 import { useI18n } from 'vue-i18n';
 import Tooltip from '@/afcl/Tooltip.vue';
 import Checkbox from '@/afcl/Checkbox.vue';
+import { eventBus } from './eventBus'
 
+const listCell = ref(null);
 const { t } = useI18n();
 const props = defineProps(['column', 'record', 'resource', 'adminUser', 'meta']);
 const isEditing = ref(false);
@@ -109,11 +111,23 @@ const unmasked = ref({});
 const inputHolder = ref(null);
 
 const limitedText = computed(() => {
+  if (props.column.name == props.meta?.enFieldName && anyEditorOpen.value) {
+    return props.record[props.column.name]; // keep english text 
+  }
   const text = props.record[props.column.name];
   return text?.length > 50 ? text.slice(0, 50) + '...' : text;
 });
 
 const reviewed: Ref<boolean> = ref(false);
+const anyEditorOpen = ref(false);  // if any editor for lang page is open
+
+onMounted(() => {
+  eventBus.on(`editing-changed-${props.record.id}`, async () => {
+    console.log('editing-changed', props.record.id);
+    await nextTick();
+    anyEditorOpen.value = listCell.value?.closest('tr')?.querySelector('.trans-editor') !== null;
+  });
+});
 
 
 const originalReviewed = ref(false);
@@ -134,11 +148,14 @@ async function startEdit() {
   if (inputHolder.value) {
     inputHolder.value.querySelector('input, textarea, select')?.focus();
   }
+  eventBus.emit(`editing-changed-${props.record.id}`, null);
 }
 
 function cancelEdit() {
   isEditing.value = false;
   editValue.value = null;
+  eventBus.emit(`editing-changed-${props.record.id}`, null);
+
 }
 
 function setCurrentValue(field, value, arrayIndex = undefined) {
@@ -170,6 +187,8 @@ function setCurrentValue(field, value, arrayIndex = undefined) {
     currentValues.value[field] = value;
     editValue.value = value;
   }
+  eventBus.emit(`editing-changed-${props.record.id}`, null);
+
 }
 
 async function saveEdit() {

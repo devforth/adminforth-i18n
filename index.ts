@@ -188,6 +188,7 @@ export default class I18nPlugin extends AdminForthPlugin {
           pluginInstanceId: this.pluginInstanceId,
           lang,
           reviewedCheckboxesFieldName: this.options.reviewedCheckboxesFieldName,
+          enFieldName: this.enFieldName,
         },
       };
     }
@@ -220,6 +221,9 @@ export default class I18nPlugin extends AdminForthPlugin {
     };
     enColumn.components.list = {
       file: this.componentPath('ListCell.vue'),
+      meta: {
+        enFieldName: this.enFieldName,
+      }
     };
     enColumn.editReadonly = true;
 
