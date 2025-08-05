@@ -391,7 +391,7 @@ export default class I18nPlugin extends AdminForthPlugin {
         if (fullyTranslatedFilter) {
           // remove it from filters because it is virtual field
           query.filters = query.filters.filter((f: any) => f.field !== 'fully_translated');
-          if (fullyTranslatedFilter.value[0]) {
+          if (fullyTranslatedFilter.value) {
             query.filters.push({
               field: this.options.completedFieldName,
               value: this.fullCompleatedFieldValue,
