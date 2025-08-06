@@ -8,10 +8,6 @@ import chokidar from 'chokidar';
 import  { AsyncQueue } from '@sapphire/async-queue';
 
 
-console.log = (...args) => {
-  process.stdout.write(args.join(" ") + "\n");
-};
-
 const processFrontendMessagesQueue = new AsyncQueue();
 
 const SLAVIC_PLURAL_EXAMPLES = {
