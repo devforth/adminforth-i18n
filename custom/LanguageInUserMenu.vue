@@ -70,9 +70,10 @@ function doChangeLang(lang) {
 
 const options = computed(() => {
   return props.meta.supportedLanguages.map((lang) => {
+    const region = String(lang.code).split('-')[1]?.toUpperCase();
     return {
       value: lang.code,
-      label: lang.name,
+      label: region ? `${lang.name} (${region})` : lang.name,
     };
   });
 });
@@ -92,11 +93,4 @@ onMounted(() => {
   setLang({ setLocaleMessage, locale }, props.meta.pluginInstanceId, selectedLanguage.value);
   // todo this mounted executed only on this component mount, f5 from another page apart login will not read it
 });
-
-
-
-
-
-
-
 </script>

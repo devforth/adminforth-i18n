@@ -1,7 +1,8 @@
-import AdminForth, { AdminForthPlugin, Filters, suggestIfTypo, AdminForthDataTypes } from "adminforth";
+import AdminForth, { AdminForthPlugin, Filters, suggestIfTypo, AdminForthDataTypes } from "../../adminforth/dist/index.js";
 import type { IAdminForth, IHttpServer, AdminForthComponentDeclaration, AdminForthResourceColumn, AdminForthResource, BeforeLoginConfirmationFunction, AdminForthConfigMenuItem } from "adminforth";
-import type { PluginOptions } from './types.js';
-import iso6391, { LanguageCode } from 'iso-639-1';
+import type { PluginOptions, SupportedLanguage } from './types.js';
+import iso6391 from 'iso-639-1';
+import { iso31661Alpha2ToAlpha3 } from 'iso-3166';
 import path from 'path';
 import fs from 'fs-extra';
 import chokidar from 'chokidar';
@@ -37,8 +38,28 @@ const countryISO31661ByLangISO6391 = {
   ur: 'pk', // Urdu → Pakistan
 };
 
-function getCountryCodeFromLangCode(langCode) {
+function getCountryCodeFromLangCode(lang: SupportedLanguage) {
+  const [langCode, region] = String(lang).split('-');
+  if (region && /^[A-Z]{2}$/.test(region)) {
+    return region.toLowerCase();
+  }
   return countryISO31661ByLangISO6391[langCode] || langCode;
+}
+
+function getPrimaryLanguageCode(langCode: SupportedLanguage): string {
+  return String(langCode).split('-')[0];
+}
+
+function isValidSupportedLanguageTag(langCode: SupportedLanguage): boolean {
+  const [primary, region] = String(langCode).split('-');
+  if (!iso6391.validate(primary as any)) {
+    return false;
+  }
+  if (!region) {
+    return true;
+  }
+  const regionUpper = region.toUpperCase();
+  return /^[A-Z]{2}$/.test(regionUpper) && (regionUpper in iso31661Alpha2ToAlpha3);
 }
 
 
@@ -86,7 +107,7 @@ export default class I18nPlugin extends AdminForthPlugin {
   passwordField: AdminForthResourceColumn;
   authResource: AdminForthResource;
   emailConfirmedField?: AdminForthResourceColumn;
-  trFieldNames: Partial<Record<LanguageCode, string>>;
+  trFieldNames: Partial<Record<SupportedLanguage, string>>;
   enFieldName: string;
   cache: ICachingAdapter;
   primaryKeyFieldName: string;
@@ -105,7 +126,7 @@ export default class I18nPlugin extends AdminForthPlugin {
   }
 
   async computeCompletedFieldValue(record: any) {
-    return this.options.supportedLanguages.reduce((acc: string, lang: LanguageCode): string => {
+    return this.options.supportedLanguages.reduce((acc: string, lang: SupportedLanguage): string => {
       if (lang === 'en') {
         return acc;
       }
@@ -134,10 +155,10 @@ export default class I18nPlugin extends AdminForthPlugin {
   async modifyResourceConfig(adminforth: IAdminForth, resourceConfig: AdminForthResource) {
     super.modifyResourceConfig(adminforth, resourceConfig);
 
-    // check each supported language is valid ISO 639-1 code
+    // validate each supported language: ISO 639-1 or BCP-47 with region (e.g., en-GB)
     this.options.supportedLanguages.forEach((lang) => {
-      if (!iso6391.validate(lang)) {
-        throw new Error(`Invalid language code ${lang}, please define valid ISO 639-1 language code (2 lowercase letters)`);
+      if (!isValidSupportedLanguageTag(lang)) {
+        throw new Error(`Invalid language code ${lang}. Use ISO 639-1 (e.g., 'en') or BCP-47 with region (e.g., 'en-GB').`);
       }
     });
     
@@ -169,7 +190,7 @@ export default class I18nPlugin extends AdminForthPlugin {
 
     this.enFieldName = this.trFieldNames['en'] || 'en_string';
 
-    this.fullCompleatedFieldValue = this.options.supportedLanguages.reduce((acc: string, lang: LanguageCode) => {
+    this.fullCompleatedFieldValue = this.options.supportedLanguages.reduce((acc: string, lang: SupportedLanguage) => {
       if (lang === 'en') {
         return acc;
       }
@@ -223,7 +244,7 @@ export default class I18nPlugin extends AdminForthPlugin {
         {
           code: lang,
           // lang name on on language native name
-          name: iso6391.getNativeName(lang),
+          name: iso6391.getNativeName(getPrimaryLanguageCode(lang)),
         }
       ))
     };
@@ -260,7 +281,7 @@ export default class I18nPlugin extends AdminForthPlugin {
     resourceConfig.hooks.edit.afterSave.push(async ({ updates, oldRecord }: { updates: any, oldRecord?: any }): Promise<{ ok: boolean, error?: string }> => {
       if (oldRecord) {
         // find lang which changed
-        let langsChanged: LanguageCode[] = [];
+        let langsChanged: SupportedLanguage[] = [];
         for (const lang of this.options.supportedLanguages) {
           if (lang === 'en') {
             continue;
@@ -362,7 +383,7 @@ export default class I18nPlugin extends AdminForthPlugin {
           icon: 'flowbite:language-outline',
           // if optional `confirm` is provided, user will be asked to confirm action
           confirm: 'Are you sure you want to translate selected items?',
-          state: 'selected',
+          state: 'selected' as any,
           allowed: async ({ resource, adminUser, selectedIds, allowedActions }) => {
             console.log('allowedActions', JSON.stringify(allowedActions));
             return allowedActions.edit;
@@ -416,7 +437,7 @@ export default class I18nPlugin extends AdminForthPlugin {
   }
 
   async translateToLang (
-      langIsoCode: LanguageCode, 
+      langIsoCode: SupportedLanguage, 
       strings: { en_string: string, category: string }[], 
       plurals=false,
       translations: any[],
@@ -438,24 +459,25 @@ export default class I18nPlugin extends AdminForthPlugin {
       return totalTranslated;
     }
     const lang = langIsoCode;
-    const langName = iso6391.getName(lang);
-    const requestSlavicPlurals = Object.keys(SLAVIC_PLURAL_EXAMPLES).includes(lang) && plurals;
-
+    const primaryLang = getPrimaryLanguageCode(lang);
+    const langName = iso6391.getName(primaryLang);
+    const requestSlavicPlurals = Object.keys(SLAVIC_PLURAL_EXAMPLES).includes(primaryLang) && plurals;
+    const region = String(lang).split('-')[1]?.toUpperCase() || '';
     const prompt = `
-I need to translate strings in JSON to ${lang} (${langName}) language from English for my web app.
-${requestSlavicPlurals ? `You should provide 4 slavic forms (in format "zero count | singular count | 2-4 | 5+") e.g. "apple | apples" should become "${SLAVIC_PLURAL_EXAMPLES[lang]}"` : ''}
-Keep keys, as is, write translation into values! Here are the strings:
+      I need to translate strings in JSON to ${lang} (${langName}) language from English for my web app.
+      ${region ? `Use the regional conventions for ${lang} (region ${region}), including spelling, punctuation, and formatting.` : ''}
+      ${requestSlavicPlurals ? `You should provide 4 slavic forms (in format "zero count | singular count | 2-4 | 5+") e.g. "apple | apples" should become "${SLAVIC_PLURAL_EXAMPLES[primaryLang]}"` : ''}
+      Keep keys, as is, write translation into values! Here are the strings:
 
-\`\`\`json
-${
-JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object => {
-  acc[s.en_string] = '';
-  return acc;
-}, {}), null, 2)
-}
-\`\`\`
-`;  
-
+      \`\`\`json
+      ${
+      JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object => {
+        acc[s.en_string] = '';
+        return acc;
+      }, {}), null, 2)
+      }
+      \`\`\`
+    `;  
     // call OpenAI
     const resp = await this.options.completeAdapter.complete(
       prompt,
@@ -524,7 +546,7 @@ JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object =>
 
     const needToTranslateByLang : Partial<
       Record<
-        LanguageCode,
+        SupportedLanguage,
         {
           en_string: string;
           category: string;
@@ -567,7 +589,7 @@ JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object =>
 
     await Promise.all(
       Object.entries(needToTranslateByLang).map(
-        async ([lang, strings]: [LanguageCode, { en_string: string, category: string }[]]) => {
+        async ([lang, strings]: [SupportedLanguage, { en_string: string, category: string }[]]) => {
           // first translate without plurals
           const stringsWithoutPlurals = strings.filter(s => !s.en_string.includes('|'));
           const noPluralKeys = await this.translateToLang(lang, stringsWithoutPlurals, false, translations, updateStrings);
@@ -706,7 +728,7 @@ JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object =>
       // console.log('🪲tr', msg, category, lang);
 
       // if lang is not supported , throw
-      if (!this.options.supportedLanguages.includes(lang as LanguageCode)) {
+      if (!this.options.supportedLanguages.includes(lang as SupportedLanguage)) {
         lang = 'en'; // for now simply fallback to english
 
         // throwing like line below might be too strict, e.g. for custom apis made with fetch which don't pass accept-language
@@ -813,16 +835,16 @@ JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object =>
   }
 
   async languagesList(): Promise<{
-    code: LanguageCode;
+    code: SupportedLanguage;
     nameOnNative: string;
     nameEnglish: string;
     emojiFlag: string;
   }[]> {
     return this.options.supportedLanguages.map((lang) => {
       return {
-        code: lang as LanguageCode,
-        nameOnNative: iso6391.getNativeName(lang),
-        nameEnglish: iso6391.getName(lang),
+        code: lang,
+        nameOnNative: iso6391.getNativeName(getPrimaryLanguageCode(lang)),
+        nameEnglish: iso6391.getName(getPrimaryLanguageCode(lang)),
         emojiFlag: getCountryCodeFromLangCode(lang).toUpperCase().replace(/./g, char => String.fromCodePoint(char.charCodeAt(0) + 127397)),
       };
     });

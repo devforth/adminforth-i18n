@@ -58,7 +58,11 @@ const countryISO31661ByLangISO6391 = {
 };
 
 export function getCountryCodeFromLangCode(langCode) {
-    return countryISO31661ByLangISO6391[langCode] || langCode;
+    const [primary, region] = String(langCode).split('-');
+    if (region && /^[A-Za-z]{2}$/.test(region)) {
+        return region.toLowerCase();
+    }
+    return countryISO31661ByLangISO6391[primary] || primary;
 }
 
 
