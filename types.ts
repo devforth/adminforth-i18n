@@ -1,17 +1,23 @@
 import { CompletionAdapter, EmailAdapter } from 'adminforth';
 import type { LanguageCode } from 'iso-639-1';
+import { iso31661Alpha2ToAlpha3 } from 'iso-3166';
 
+
+// BCP-47 support for types only: primary subtag is ISO 639-1, optional region
+type Alpha2Code = keyof typeof iso31661Alpha2ToAlpha3;
+type Bcp47LanguageTag = `${LanguageCode}-${Alpha2Code}`;
+export type SupportedLanguage = LanguageCode | Bcp47LanguageTag;
 
 export interface PluginOptions {
 
   /* List of ISO 639-1 language codes which you want to tsupport*/
-  supportedLanguages: LanguageCode[];
+  supportedLanguages: SupportedLanguage[];
 
   /**
    * Each translation string will be stored in a separate field, you can remap it to existing columns  using this option
    * By default it will assume field are named like `${lang_code}_string` (e.g. 'en_string', 'uk_string', 'ja_string', 'fr_string')
    */
-  translationFieldNames: Partial<Record<LanguageCode, string>>;
+  translationFieldNames: Partial<Record<SupportedLanguage, string>>;
 
   /**
    * Each string has a category, e.g. it might come from 'frontend' or some message from backend or column name on backend
@@ -49,4 +55,12 @@ export interface PluginOptions {
    * it should be a JSON field (underlyng database type should be TEXT or JSON)
    */
   reviewedCheckboxesFieldName?: string;
+
+  /**
+   * Primary language for the application. This is the default language shown to users.
+   * English is always used as the source language for translations, even if primaryLanguage is different.
+   * When a translation is missing for the primaryLanguage, English will be shown as fallback.
+   * Defaults to 'en' if not specified.
+   */
+  primaryLanguage?: SupportedLanguage;
 }

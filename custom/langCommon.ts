@@ -4,6 +4,7 @@ import dayjsLocales from './dayjsLocales';
 import datepickerLocales from './datepickerLocales';
 import dayjs from 'dayjs';
 import Datepicker from "flowbite-datepicker/Datepicker";
+import type { SupportedLanguage } from '../types';
 
 
 const messagesCache: Record<
@@ -78,13 +79,17 @@ const countryISO31661ByLangISO6391 = {
 };
 
 export function getCountryCodeFromLangCode(langCode) {
-    return countryISO31661ByLangISO6391[langCode] || langCode;
+    const [primary, region] = String(langCode).split('-');
+    if (region && /^[A-Za-z]{2}$/.test(region)) {
+        return region.toLowerCase();
+    }
+    return countryISO31661ByLangISO6391[primary] || primary;
 }
 
 
 const LS_LANG_KEY = `afLanguage`;
 
-export function getLocalLang(supportedLanguages: {code}[]): string {
+export function getLocalLang(supportedLanguages: {code}[], primaryLanguage?: SupportedLanguage): string {
     let lsLang = localStorage.getItem(LS_LANG_KEY);
     // if someone screwed up the local storage or we stopped language support, lets check if it is in supported languages
     if (lsLang && !supportedLanguages.find((l) => l.code == lsLang)) {
@@ -99,6 +104,10 @@ export function getLocalLang(supportedLanguages: {code}[]): string {
     if (foundLang) {
         return foundLang.code;
     }
+    if (primaryLanguage && supportedLanguages.find((l) => l.code == primaryLanguage)) {
+        return primaryLanguage;
+    }
+
     return supportedLanguages[0].code;
 }
 

@@ -70,9 +70,10 @@ function doChangeLang(lang) {
 
 const options = computed(() => {
   return props.meta.supportedLanguages.map((lang) => {
+    const region = String(lang.code).split('-')[1]?.toUpperCase();
     return {
       value: lang.code,
-      label: lang.name,
+      label: region ? `${lang.name} (${region})` : lang.name,
     };
   });
 });
@@ -87,6 +88,6 @@ const selectedOption = computed(() => {
 
 
 onMounted(() => {
-  selectedLanguage.value = getLocalLang(props.meta.supportedLanguages);
+  selectedLanguage.value = getLocalLang(props.meta.supportedLanguages, props.meta.primaryLanguage);
 });
 </script>
