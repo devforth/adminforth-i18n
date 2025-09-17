@@ -88,9 +88,6 @@ const selectedOption = computed(() => {
 
 
 onMounted(() => {
-  console.log('Language In user menu mounted', props.meta.supportedLanguages);
   selectedLanguage.value = getLocalLang(props.meta.supportedLanguages);
-  setLang({ setLocaleMessage, locale }, props.meta.pluginInstanceId, selectedLanguage.value);
-  // todo this mounted executed only on this component mount, f5 from another page apart login will not read it
 });
 </script>

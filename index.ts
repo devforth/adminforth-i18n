@@ -1,4 +1,4 @@
-import AdminForth, { AdminForthPlugin, Filters, suggestIfTypo, AdminForthDataTypes } from "../../adminforth/dist/index.js";
+import AdminForth, { AdminForthPlugin, Filters, suggestIfTypo, AdminForthDataTypes, RAMLock } from "adminforth";
 import type { IAdminForth, IHttpServer, AdminForthComponentDeclaration, AdminForthResourceColumn, AdminForthResource, BeforeLoginConfirmationFunction, AdminForthConfigMenuItem } from "adminforth";
 import type { PluginOptions, SupportedLanguage } from './types.js';
 import iso6391 from 'iso-639-1';
@@ -7,9 +7,7 @@ import path from 'path';
 import fs from 'fs-extra';
 import chokidar from 'chokidar';
 import  { AsyncQueue } from '@sapphire/async-queue';
-console.log = (...args) => {
-  process.stdout.write(args.join(" ") + "\n");
-};
+
 
 const processFrontendMessagesQueue = new AsyncQueue();
 
@@ -115,6 +113,8 @@ export default class I18nPlugin extends AdminForthPlugin {
 
   adminforth: IAdminForth;
 
+  externalAppOnly: boolean;
+
   // sorted by name list of all supported languages, without en e.g. 'al|ro|uk'
   fullCompleatedFieldValue: string;
 
@@ -161,7 +161,8 @@ export default class I18nPlugin extends AdminForthPlugin {
         throw new Error(`Invalid language code ${lang}. Use ISO 639-1 (e.g., 'en') or BCP-47 with region (e.g., 'en-GB').`);
       }
     });
-    
+
+    this.externalAppOnly = this.options.externalAppOnly === true;
 
     // find primary key field
     this.primaryKeyFieldName = resourceConfig.columns.find(c => c.primaryKey)?.name;
@@ -186,6 +187,27 @@ export default class I18nPlugin extends AdminForthPlugin {
         throw new Error(`Field ${this.trFieldNames[lang]} not found for storing translation for language ${lang}
            in resource ${resourceConfig.resourceId}, consider adding it to columns or change trFieldNames option to remap it to existing column`);
       }
+
+      column.components = column.components || {};
+      
+      // set edit and create custom component - SingleMultiInput.vue
+      column.components.edit = {
+        file: this.componentPath('SingleMultiInput.vue'),
+      };
+      column.components.create = {
+        file: this.componentPath('SingleMultiInput.vue'),
+      };
+
+      // set ListCell for list
+      column.components.list = {
+        file: this.componentPath('ListCell.vue'),
+        meta: {
+          pluginInstanceId: this.pluginInstanceId,
+          lang,
+          reviewedCheckboxesFieldName: this.options.reviewedCheckboxesFieldName,
+          enFieldName: this.enFieldName,
+        },
+      };
     }
 
     this.enFieldName = this.trFieldNames['en'] || 'en_string';
@@ -207,6 +229,19 @@ export default class I18nPlugin extends AdminForthPlugin {
       throw new Error(`Field ${this.enFieldName} not found column to store english original string in resource ${resourceConfig.resourceId}`);
     }
 
+    enColumn.components = enColumn.components || {};
+    enColumn.components.edit = {
+      file: this.componentPath('SingleMultiInput.vue'),
+    };
+    enColumn.components.create = {
+      file: this.componentPath('SingleMultiInput.vue'),
+    };
+    enColumn.components.list = {
+      file: this.componentPath('ListCell.vue'),
+      meta: {
+        enFieldName: this.enFieldName,
+      }
+    };
     enColumn.editReadonly = true;
 
     // if sourceFieldName defined, check it exists
@@ -225,14 +260,29 @@ export default class I18nPlugin extends AdminForthPlugin {
       }
 
       // if showIn is not defined, add it as empty
-      column.showIn = [];
+      column.showIn = {
+        show: false,
+        list: false,
+        edit: false,
+        create: false,
+        filter: false,
+      };
 
       // add virtual field for incomplete
       resourceConfig.columns.unshift({
         name: 'fully_translated',
         label: 'Fully translated',
         virtual: true,
-        showIn: ['list', 'show', 'filter'],
+        filterOptions: {
+          multiselect: false,
+        },
+        showIn: {
+          show: true,
+          list: true,
+          edit: false,
+          create: false,
+          filter: true,
+        },
         type: AdminForthDataTypes.BOOLEAN,
       });
     }
@@ -249,15 +299,22 @@ export default class I18nPlugin extends AdminForthPlugin {
       ))
     };
     // add underLogin component
-    (adminforth.config.customization.loginPageInjections.underInputs).push({ 
-      file: this.componentPath('LanguageUnderLogin.vue'),
-      meta: compMeta
-    });
+    if (!this.externalAppOnly) {
+      (adminforth.config.customization.loginPageInjections.underInputs).push({ 
+        file: this.componentPath('LanguageUnderLogin.vue'),
+        meta: compMeta
+      });
 
-    (adminforth.config.customization.globalInjections.userMenu).push({
-      file: this.componentPath('LanguageInUserMenu.vue'),
-      meta: compMeta
-    });
+      (adminforth.config.customization.globalInjections.userMenu).push({
+        file: this.componentPath('LanguageInUserMenu.vue'),
+        meta: compMeta
+      });
+
+      adminforth.config.customization.globalInjections.everyPageBottom.push({
+        file: this.componentPath('LanguageEveryPageLoader.vue'),
+        meta: compMeta
+      });
+    }
 
     // disable create allowedActions for translations
     resourceConfig.options.allowedActions.create = false;
@@ -351,7 +408,7 @@ export default class I18nPlugin extends AdminForthPlugin {
         if (fullyTranslatedFilter) {
           // remove it from filters because it is virtual field
           query.filters = query.filters.filter((f: any) => f.field !== 'fully_translated');
-          if (fullyTranslatedFilter.value[0]) {
+          if (fullyTranslatedFilter.value) {
             query.filters.push({
               field: this.options.completedFieldName,
               value: this.fullCompleatedFieldValue,
@@ -381,11 +438,12 @@ export default class I18nPlugin extends AdminForthPlugin {
           id: 'translate_all',
           label: 'Translate selected',
           icon: 'flowbite:language-outline',
+          badge: 'AI',
           // if optional `confirm` is provided, user will be asked to confirm action
-          confirm: 'Are you sure you want to translate selected items?',
+          confirm: 'Are you sure you want to translate selected items? Only empty strings will be translated',
           state: 'selected' as any,
           allowed: async ({ resource, adminUser, selectedIds, allowedActions }) => {
-            console.log('allowedActions', JSON.stringify(allowedActions));
+            process.env.HEAVY_DEBUG && console.log('allowedActions', JSON.stringify(allowedActions));
             return allowedActions.edit;
           },
           action: async ({ selectedIds, tr }) => {
@@ -464,10 +522,10 @@ export default class I18nPlugin extends AdminForthPlugin {
     const requestSlavicPlurals = Object.keys(SLAVIC_PLURAL_EXAMPLES).includes(primaryLang) && plurals;
     const region = String(lang).split('-')[1]?.toUpperCase() || '';
     const prompt = `
-      I need to translate strings in JSON to ${lang} (${langName}) language from English for my web app.
+      I need to translate strings in JSON to ${langName} language (ISO 639-1 code ${lang}) from English for my web app.
       ${region ? `Use the regional conventions for ${lang} (region ${region}), including spelling, punctuation, and formatting.` : ''}
-      ${requestSlavicPlurals ? `You should provide 4 slavic forms (in format "zero count | singular count | 2-4 | 5+") e.g. "apple | apples" should become "${SLAVIC_PLURAL_EXAMPLES[primaryLang]}"` : ''}
-      Keep keys, as is, write translation into values! Here are the strings:
+      ${requestSlavicPlurals ? `You should provide 4 slavic forms (in format "zero count | singular count | 2-4 | 5+") e.g. "apple | apples" should become "${SLAVIC_PLURAL_EXAMPLES[lang]}"` : ''}
+      Keep keys, as is, write translation into values! If keys have variables (in curly brackets), then translated strings should have them as well (variables itself should not be translated). Here are the strings:
 
       \`\`\`json
       ${
@@ -476,16 +534,18 @@ export default class I18nPlugin extends AdminForthPlugin {
         return acc;
       }, {}), null, 2)
       }
-      \`\`\`
-    `;  
+\`\`\`
+`;  
+
     // call OpenAI
     const resp = await this.options.completeAdapter.complete(
       prompt,
       [],
-      300,
+      prompt.length * 2,
     );
 
-
+    process.env.HEAVY_DEBUG && console.log(`🪲🔪LLM resp >> ${prompt.length}, <<${resp.content.length} :\n\n`, JSON.stringify(resp));
+    
     if (resp.error) {
       throw new AiTranslateError(resp.error);
     }
@@ -622,14 +682,17 @@ export default class I18nPlugin extends AdminForthPlugin {
     );
 
     for (const lang of langsInvolved) {
-      await this.cache.clear(`${this.resourceConfig.resourceId}:frontend:${lang}`);
+      const categoriesInvolved = new Set();
       for (const { enStr, category } of Object.values(updateStrings)) {
+        categoriesInvolved.add(category);
         await this.cache.clear(`${this.resourceConfig.resourceId}:${category}:${lang}:${enStr}`);
+      }
+      for (const category of categoriesInvolved) {
+        await this.cache.clear(`${this.resourceConfig.resourceId}:${category}:${lang}`);
       }
     }
 
     return new Set(totalTranslated).size;
-
   }
 
   async processExtractedMessages(adminforth: IAdminForth, filePath: string) {
@@ -678,7 +741,6 @@ export default class I18nPlugin extends AdminForthPlugin {
       process.env.HEAVY_DEBUG && console.log('🪲🔔messagesFile add', messagesFile);
       this.processExtractedMessages(adminforth, messagesFile);
     });
-
   }
   
   validateConfigAfterDiscover(adminforth: IAdminForth, resourceConfig: AdminForthResource) {
@@ -702,6 +764,19 @@ export default class I18nPlugin extends AdminForthPlugin {
       }
     }
 
+    if (this.options.reviewedCheckboxesFieldName) {
+      // ensure type is JSON
+      const column = resourceConfig.columns.find(c => c.name === this.options.reviewedCheckboxesFieldName);
+      if (!column) {
+        const similar = suggestIfTypo(resourceConfig.columns.map((col) => col.name), this.options.reviewedCheckboxesFieldName);
+        throw new Error(`Field ${this.options.reviewedCheckboxesFieldName} not found in resource ${resourceConfig.resourceId}${similar ? `Did you mean '${similar}'?` : ''}`);
+      }
+      if (column.type !== AdminForthDataTypes.JSON) {
+        throw new Error(`Field ${this.options.reviewedCheckboxesFieldName} should be of type JSON in resource ${resourceConfig.resourceId}, but it is ${column.type}`);
+      }
+    }
+
+
     // ensure categoryFieldName defined and is string
     if (!this.options.categoryFieldName) {
       throw new Error(`categoryFieldName option is not defined. It is used to categorize translations and return only specific category e.g. to frontend`);
@@ -715,70 +790,74 @@ export default class I18nPlugin extends AdminForthPlugin {
     }
 
     // in this plugin we will use plugin to fill the database with missing language messages
-    this.tryProcessAndWatch(adminforth);
+    if (!this.externalAppOnly) {
+      this.tryProcessAndWatch(adminforth);
 
-    adminforth.tr = async (msg: string | null | undefined, category: string, lang: string, params, pluralizationNumber: number): Promise<string> => {
-      if (!msg) {
-        return msg;
-      }
+      adminforth.tr = async (msg: string | null | undefined, category: string, lang: string, params, pluralizationNumber: number): Promise<string> => {
+        if (!msg) {
+          return msg;
+        }
 
-      if (category === 'frontend') {
-        throw new Error(`Category 'frontend' is reserved for frontend messages, use any other category for backend messages`);
-      }
-      // console.log('🪲tr', msg, category, lang);
+        if (category === 'frontend') {
+          throw new Error(`Category 'frontend' is reserved for frontend messages, use any other category for backend messages`);
+        }
+        // console.log('🪲tr', msg, category, lang);
 
       // if lang is not supported , throw
       if (!this.options.supportedLanguages.includes(lang as SupportedLanguage)) {
         lang = 'en'; // for now simply fallback to english
 
-        // throwing like line below might be too strict, e.g. for custom apis made with fetch which don't pass accept-language
-        // throw new Error(`Language ${lang} is not entered to be supported by requested by browser in request headers accept-language`);
-      }
-
-      let result;
-      // try to get translation from cache
-      const cacheKey = `${resourceConfig.resourceId}:${category}:${lang}:${msg}`;
-      const cached = await this.cache.get(cacheKey);
-      if (cached) {
-        result = cached;
-      }
-      if (!result) {
-        const resource = adminforth.resource(resourceConfig.resourceId);
-        const translation = await resource.get([Filters.EQ(this.enFieldName, msg), Filters.EQ(this.options.categoryFieldName, category)]);
-        if (!translation) {
-          await resource.create({
-            [this.enFieldName]: msg,
-            [this.options.categoryFieldName]: category,
-          });
-          this.updateUntranslatedMenuBadge();
+          // throwing like line below might be too strict, e.g. for custom apis made with fetch which don't pass accept-language
+          // throw new Error(`Language ${lang} is not entered to be supported by requested by browser in request headers accept-language`);
         }
 
-        // do this check here, to faster register missing translations
-        // also not cache it - no sense to cache english strings
-        if (lang === 'en') {
-          // set to cache to return faster next time
-          result = msg;
-        } else {
-          result = translation?.[this.trFieldNames[lang]];
-          if (!result) {
-            // return english
+        let result;
+        // try to get translation from cache
+        const cacheKey = `${resourceConfig.resourceId}:${category}:${lang}:${msg}`;
+        const cached = await this.cache.get(cacheKey);
+        if (cached) {
+          result = cached;
+        }
+        if (!result) {
+          const resource = adminforth.resource(resourceConfig.resourceId);
+          const translation = await resource.get([Filters.EQ(this.enFieldName, msg), Filters.EQ(this.options.categoryFieldName, category)]);
+          if (!translation) {
+            await resource.create({
+              [this.enFieldName]: msg,
+              [this.options.categoryFieldName]: category,
+            });
+            this.updateUntranslatedMenuBadge();
+          }
+
+          // do this check here, to faster register missing translations
+          // also not cache it - no sense to cache english strings
+          if (lang === 'en') {
+            // set to cache to return faster next time
             result = msg;
+          } else {
+            result = translation?.[this.trFieldNames[lang]];
+            if (!result) {
+              // return english
+              result = msg;
+            }
+          }
+          // cache so even if key does not exist, we will not hit database
+          await this.cache.set(cacheKey, result);
+        }
+        // if msg has '|' in it, then we need to aplly pluralization
+        if (msg.includes('|')) {
+          result = this.applyPluralization(result, pluralizationNumber, lang);
+        }
+
+        if (params) {
+          for (const [key, value] of Object.entries(params)) {
+            if (result) {
+              result = result.replace(`{${key}}`, value);
+            }
           }
         }
-        // cache so even if key does not exist, we will not hit database
-        await this.cache.set(cacheKey, result);
+        return result;
       }
-      // if msg has '|' in it, then we need to aplly pluralization
-      if (msg.includes('|')) {
-        result = this.applyPluralization(result, pluralizationNumber, lang);
-      }
-
-      if (params) {
-        for (const [key, value] of Object.entries(params)) {
-          result = result.replace(`{${key}}`, value);
-        }
-      }
-      return result;
     }
   }
 
@@ -903,6 +982,57 @@ export default class I18nPlugin extends AdminForthPlugin {
         const translations = await this.getCategoryTranslations('frontend', lang);
         return translations;
 
+      }
+    });
+
+    const lock = new RAMLock();
+
+    server.endpoint({
+      method: 'POST',
+      path: `/plugin/${this.pluginInstanceId}/update-field`,
+      handler: async ({ body, adminUser, headers }) => {
+        const { resourceId, recordId, field, value, reviewed } = body;
+
+        const resource = this.adminforth.config.resources.find(r => r.resourceId === resourceId);
+        // Create update object with just the single field
+        const updateRecord = { [field]: value };
+        
+        // Use AdminForth's built-in update method
+        const connector = this.adminforth.connectors[resource.dataSource];
+
+        let oldRecord;
+        let result;
+        await lock.run(`edit-trans-${recordId}`,  async () => {
+          // put into lock so 2 editors will not update the same record at the same time
+          oldRecord = await connector.getRecordByPrimaryKey(resource, recordId)
+
+          if (this.options.reviewedCheckboxesFieldName) {
+            let oldValue;
+            if (!oldRecord[this.options.reviewedCheckboxesFieldName]) {
+              oldValue = {}
+            } else {
+              oldValue = {...oldRecord[this.options.reviewedCheckboxesFieldName]};
+            }
+            oldValue[field] = reviewed;
+            updateRecord[this.options.reviewedCheckboxesFieldName] = { ...oldValue };
+          }
+
+          result = await this.adminforth.updateResourceRecord({
+            resource,
+            recordId,
+            record: updateRecord,
+            oldRecord,
+            adminUser
+          });
+        });
+
+        if (result.error) {
+          return { error: result.error };
+        }
+
+        const updatedRecord = await connector.getRecordByPrimaryKey(resource, recordId);
+
+        return { record: updatedRecord };
       }
     });
 
