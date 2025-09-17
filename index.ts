@@ -444,7 +444,6 @@ export default class I18nPlugin extends AdminForthPlugin {
           badge: 'AI',
           // if optional `confirm` is provided, user will be asked to confirm action
           confirm: 'Are you sure you want to translate selected items? Only empty strings will be translated',
-          state: 'selected' as any,
           allowed: async ({ resource, adminUser, selectedIds, allowedActions }) => {
             process.env.HEAVY_DEBUG && console.log('allowedActions', JSON.stringify(allowedActions));
             return allowedActions.edit;
