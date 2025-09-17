@@ -55,4 +55,12 @@ export interface PluginOptions {
    * it should be a JSON field (underlyng database type should be TEXT or JSON)
    */
   reviewedCheckboxesFieldName?: string;
+
+  /**
+   * Primary language for the application. This is the default language shown to users.
+   * English is always used as the source language for translations, even if primaryLanguage is different.
+   * When a translation is missing for the primaryLanguage, English will be shown as fallback.
+   * Defaults to 'en' if not specified.
+   */
+  primaryLanguage?: SupportedLanguage;
 }

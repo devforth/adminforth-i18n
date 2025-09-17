@@ -117,12 +117,14 @@ export default class I18nPlugin extends AdminForthPlugin {
 
   // sorted by name list of all supported languages, without en e.g. 'al|ro|uk'
   fullCompleatedFieldValue: string;
+  primaryLanguage: SupportedLanguage;
 
   constructor(options: PluginOptions) {
     super(options, import.meta.url);
     this.options = options;
     this.cache = new CachingAdapterMemory();
     this.trFieldNames = {};
+    this.primaryLanguage = options.primaryLanguage || 'en';
   }
 
   async computeCompletedFieldValue(record: any) {
@@ -290,6 +292,7 @@ export default class I18nPlugin extends AdminForthPlugin {
     const compMeta = { 
       brandSlug: adminforth.config.customization.brandNameSlug,
       pluginInstanceId: this.pluginInstanceId,
+      primaryLanguage: this.primaryLanguage,
       supportedLanguages: this.options.supportedLanguages.map(lang => (
         {
           code: lang,
@@ -522,20 +525,20 @@ export default class I18nPlugin extends AdminForthPlugin {
     const requestSlavicPlurals = Object.keys(SLAVIC_PLURAL_EXAMPLES).includes(primaryLang) && plurals;
     const region = String(lang).split('-')[1]?.toUpperCase() || '';
     const prompt = `
-      I need to translate strings in JSON to ${langName} language (ISO 639-1 code ${lang}) from English for my web app.
-      ${region ? `Use the regional conventions for ${lang} (region ${region}), including spelling, punctuation, and formatting.` : ''}
-      ${requestSlavicPlurals ? `You should provide 4 slavic forms (in format "zero count | singular count | 2-4 | 5+") e.g. "apple | apples" should become "${SLAVIC_PLURAL_EXAMPLES[lang]}"` : ''}
-      Keep keys, as is, write translation into values! If keys have variables (in curly brackets), then translated strings should have them as well (variables itself should not be translated). Here are the strings:
+        I need to translate strings in JSON to ${langName} language (ISO 639-1 code ${lang}) from English for my web app.
+        ${region ? `Use the regional conventions for ${lang} (region ${region}), including spelling, punctuation, and formatting.` : ''}
+        ${requestSlavicPlurals ? `You should provide 4 slavic forms (in format "zero count | singular count | 2-4 | 5+") e.g. "apple | apples" should become "${SLAVIC_PLURAL_EXAMPLES[lang]}"` : ''}
+        Keep keys, as is, write translation into values! If keys have variables (in curly brackets), then translated strings should have them as well (variables itself should not be translated). Here are the strings:
 
-      \`\`\`json
-      ${
-      JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object => {
-        acc[s.en_string] = '';
-        return acc;
-      }, {}), null, 2)
-      }
-\`\`\`
-`;  
+        \`\`\`json
+        ${
+        JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object => {
+          acc[s.en_string] = '';
+          return acc;
+        }, {}), null, 2)
+        }
+    \`\`\`
+    `;  
 
     // call OpenAI
     const resp = await this.options.completeAdapter.complete(
@@ -803,13 +806,13 @@ export default class I18nPlugin extends AdminForthPlugin {
         }
         // console.log('🪲tr', msg, category, lang);
 
-      // if lang is not supported , throw
+      // if lang is not supported, fallback to primaryLanguage, then to english
       if (!this.options.supportedLanguages.includes(lang as SupportedLanguage)) {
-        lang = 'en'; // for now simply fallback to english
-
-          // throwing like line below might be too strict, e.g. for custom apis made with fetch which don't pass accept-language
-          // throw new Error(`Language ${lang} is not entered to be supported by requested by browser in request headers accept-language`);
+        lang = this.primaryLanguage; // fallback to primary language first
+        if (!this.options.supportedLanguages.includes(lang as SupportedLanguage)) {
+          lang = 'en'; // final fallback to english
         }
+      }
 
         let result;
         // try to get translation from cache
@@ -907,7 +910,8 @@ export default class I18nPlugin extends AdminForthPlugin {
     const translations = {};
     const allTranslations = await resource.list([Filters.EQ(this.options.categoryFieldName, category)]);
     for (const tr of allTranslations) {
-      translations[tr[this.enFieldName]] = tr[this.trFieldNames[lang]];
+      const translatedValue = tr[this.trFieldNames[lang]];
+      translations[tr[this.enFieldName]] = translatedValue || tr[this.enFieldName];
     }
     await this.cache.set(cacheKey, translations);
     return translations;

@@ -62,6 +62,6 @@ const options = computed(() => {
 });
 
 onMounted(() => {
-  selectedLanguage.value = getLocalLang(props.meta.supportedLanguages);
+  selectedLanguage.value = getLocalLang(props.meta.supportedLanguages, props.meta.primaryLanguage);
 });
 </script>
