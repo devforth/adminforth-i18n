@@ -1,18 +1,19 @@
 <template>
   <div class="min-w-40">
-    <div class="cursor-pointer flex items-center gap-1 block px-4 py-2 text-sm text-black 
+    <div class="cursor-pointer flex items-center justify-between gap-1 block px-4 py-2 text-sm text-black 
       hover:bg-html dark:text-darkSidebarTextHover dark:hover:bg-darkSidebarItemHover dark:hover:text-darkSidebarTextActive 
       w-full select-none	"
       :class="{ 'bg-black bg-opacity-10	': showDropdown }"
       @click="showDropdown = !showDropdown"
     >
-      <span class="mr-1">
-        <span class="flag-icon"
-          :class="`flag-icon-${getCountryCodeFromLangCode(selectedOption.value)}`"
-        ></span>
-      </span>
-      <span>{{ selectedOption.label }}</span>
-
+      <div>
+        <span class="mr-1">
+          <span class="flag-icon"
+            :class="`flag-icon-${getCountryCodeFromLangCode(selectedOption.value)}`"
+          ></span>
+        </span>
+        <span>{{ selectedOption.label }}</span>
+      </div>
       <IconCaretDownSolid class="h-5 w-5 text-lightPrimary dark:text-gray-400 opacity-50 transition duration-150 ease-in"
           :class="{ 'transform rotate-180': showDropdown }"
       />
