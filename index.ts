@@ -293,6 +293,7 @@ export default class I18nPlugin extends AdminForthPlugin {
       brandSlug: adminforth.config.customization.brandNameSlug,
       pluginInstanceId: this.pluginInstanceId,
       primaryLanguage: this.primaryLanguage,
+      afOrder: this.options.loginPageLanguageSelectorOrder || 0,
       supportedLanguages: this.options.supportedLanguages.map(lang => (
         {
           code: lang,
@@ -303,7 +304,7 @@ export default class I18nPlugin extends AdminForthPlugin {
     };
     // add underLogin component
     if (!this.externalAppOnly) {
-      (adminforth.config.customization.loginPageInjections.underInputs).push({ 
+      (adminforth.config.customization.loginPageInjections.underLoginButton as Array<any>).push({ 
         file: this.componentPath('LanguageUnderLogin.vue'),
         meta: compMeta
       });

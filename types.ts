@@ -27,6 +27,11 @@ export interface PluginOptions {
   categoryFieldName: string;
 
   /**
+   * Language selector on login page order
+   */
+  loginPageLanguageSelectorOrder?: number;
+
+  /**
    * Optional source field to store e.g. file name where it first was captured
    */
   sourceFieldName?: string;
