@@ -1,8 +1,9 @@
 <template>
   <div class="min-w-40">
-    <div class="cursor-pointer flex items-center justify-between gap-1 block px-4 py-2 text-sm text-black 
-      hover:bg-html dark:text-darkSidebarTextHover dark:hover:bg-darkSidebarItemHover dark:hover:text-darkSidebarTextActive 
-      w-full select-none	"
+    <div class="cursor-pointer flex items-center justify-between gap-1 block px-4 py-2 text-sm
+      bg-lightUserMenuItemBackground hover:bg-lightUserMenuItemBackgroundHover text-lightUserMenuItemText 
+      hover:text-lightUserMenuItemText dark:bg-darkUserMenuItemBackground dark:hover:bg-darkUserMenuItemBackgroundHover 
+      dark:text-darkUserMenuItemText dark:hover:darkUserMenuItemTextHover w-full select-none"
       :class="{ 'bg-black bg-opacity-10	': showDropdown }"
       @click="showDropdown = !showDropdown"
     >
@@ -22,11 +23,9 @@
     <div v-if="showDropdown" >
       
       <div class="cursor-pointer flex items-center gap-1 block px-4 py-1 text-sm 
-        text-black dark:text-darkSidebarTextHover
-        bg-black bg-opacity-10	
-        hover:brightness-110
-        hover:text-lightPrimary dark:hover:text-darkPrimary
-        hover:bg-lightPrimaryContrast dark:hover:bg-darkPrimaryContrast
+        bg-lightUserMenuItemBackground hover:bg-lightUserMenuItemBackgroundHover text-lightUserMenuItemText 
+        hover:text-lightUserMenuItemText dark:bg-darkUserMenuItemBackground dark:hover:bg-darkUserMenuItemBackgroundHover 
+        dark:text-darkUserMenuItemText dark:hover:darkUserMenuItemTextHover
         w-full text-select-none pl-5 select-none"
         v-for="option in options.filter((opt) => opt.value !== selectedOption.value)"
         @click="doChangeLang(option.value)"
