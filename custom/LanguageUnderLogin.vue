@@ -48,6 +48,7 @@ const coreStore = useCoreStore();
 watch(() => selectedLanguage.value, async (newVal) => {
   await setLang({ setLocaleMessage, locale }, props.meta.pluginInstanceId, newVal);
   coreStore.getPublicConfig();
+  coreStore.getLoginFormConfig();
 });
 
 
