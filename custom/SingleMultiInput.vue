@@ -24,7 +24,7 @@ import type {
   AdminForthResourceCommon,
   AdminUser,
 } from "@/types/Common";
-import { computed, defineProps, defineEmits, type Ref, watch, nextTick, ref, onMounted } from "vue";
+import { computed, type Ref, watch, nextTick, ref, onMounted } from "vue";
 
 const shortValue: Ref<boolean> = computed(() => (props.record[props.column.name]?.length || 0) < 50);
 
