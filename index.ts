@@ -484,12 +484,12 @@ export default class I18nPlugin extends AdminForthPlugin {
       menuItem.badgeTooltip = 'Untranslated count';
     }
     adminforth.config.menu.forEach((menuItem) => {
-      if (menuItem.resourceId === resourceConfig.resourceId) {
+      if (menuItem.resourceId === resourceConfig.resourceId && !menuItem.badge) {
         addBadgeCountToMenuItem(menuItem);
       }
       if (menuItem.children) {
         menuItem.children.forEach((child) => {
-          if (child.resourceId === resourceConfig.resourceId) {
+          if (child.resourceId === resourceConfig.resourceId && !child.badge) {
             addBadgeCountToMenuItem(child);
           }
         });
