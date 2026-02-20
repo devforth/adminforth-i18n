@@ -7,6 +7,7 @@ import path from 'path';
 import fs from 'fs-extra';
 import chokidar from 'chokidar';
 import  { AsyncQueue } from '@sapphire/async-queue';
+import getFlagEmoji from 'country-flag-svg';
 
 
 const processFrontendMessagesQueue = new AsyncQueue();
@@ -922,15 +923,17 @@ export default class I18nPlugin extends AdminForthPlugin {
     nameOnNative: string;
     nameEnglish: string;
     emojiFlag: string;
+    svgFlagB64: string;
   }[]> {
-    return this.options.supportedLanguages.map((lang) => {
+    return Promise.all(this.options.supportedLanguages.map(async (lang) => {
       return {
         code: lang,
         nameOnNative: iso6391.getNativeName(getPrimaryLanguageCode(lang)),
         nameEnglish: iso6391.getName(getPrimaryLanguageCode(lang)),
         emojiFlag: getCountryCodeFromLangCode(lang).toUpperCase().replace(/./g, char => String.fromCodePoint(char.charCodeAt(0) + 127397)),
+        svgFlagB64: await (getFlagEmoji as any).default(getCountryCodeFromLangCode(lang)),
       };
-    });
+    }));
   }
 
   async feedCategoryTranslations(messages: {
