@@ -76,6 +76,8 @@ const countryISO31661ByLangISO6391 = {
     ja: 'jp', // Japanese → Japan
     uk: 'ua', // Ukrainian → Ukraine
     ur: 'pk', // Urdu → Pakistan
+    sr: 'rs', // Serbian → Serbia
+    da: 'dk' // Danish → Denmark
 };
 
 export function getCountryCodeFromLangCode(langCode) {

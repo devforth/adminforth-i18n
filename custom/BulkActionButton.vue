@@ -1,6 +1,6 @@
 <template>
   <Dialog 
-    class="w-96"
+    class="w-[500px]"
     :buttons="[
       { 
         label: 'Translate', 
@@ -35,11 +35,11 @@
     <div class="grid grid-cols-2 gap-4 w-full">
       <Button @click="selectAll" :disabled="allChecked">{{ t('Select All') }}</Button>
       <Button @click="uncheckAll" :disabled="noneChecked">{{ t('Uncheck All') }}</Button>
-      <div class="col-span-2 grid grid-cols-3 gap-2 ">
-        <div class="flex items-center justify-between cursor-pointer hover:underline" v-for="(index, lang) in checkedLanguages" :key="index" @click="toggleLanguage(lang)">
+      <div class="col-span-2 grid grid-cols-3 gap-4 ">
+        <div class="group flex items-center justify-between cursor-pointer" v-for="(index, lang) in checkedLanguages" :key="index" @click="toggleLanguage(lang)">
           <div class="flex">
             <Checkbox v-model="checkedLanguages[lang]" /> 
-            {{ lang }}
+            <span class="group-hover:underline">{{ getName(getCountryCodeFromLangCode(lang)) }}</span>
           </div>
           <span class="flag-icon"
             :class="`flag-icon-${getCountryCodeFromLangCode(lang)}`"
@@ -58,11 +58,16 @@
   import { computed, onMounted, ref, watch } from 'vue';
   import { callAdminForthApi } from '@/utils';
   import { useAdminforth } from '@/adminforth';
-  import { setLang, getCountryCodeFromLangCode, getLocalLang, setLocalLang } from './langCommon';
+  import { getCountryCodeFromLangCode } from './langCommon';
+  import { getName, overwrite } from 'country-list';
 
   const { t } = useI18n();
   const adminforth = useAdminforth();
 
+  overwrite([{
+    code: 'US',
+    name: 'USA'
+  }]);
   const props = defineProps<{
     resource: Record<string, any>;
     checkboxes: string[];
