@@ -36,8 +36,14 @@
       <Button @click="selectAll" :disabled="allChecked">{{ t('Select All') }}</Button>
       <Button @click="uncheckAll" :disabled="noneChecked">{{ t('Uncheck All') }}</Button>
       <div class="col-span-2 grid grid-cols-3 gap-2 ">
-        <div class="flex items-center justify-start cursor-pointer hover:underline" v-for="(index, lang) in checkedLanguages" :key="index" @click="toggleLanguage(lang)">
-          <Checkbox v-model="checkedLanguages[lang]" /> {{ lang }}
+        <div class="flex items-center justify-between cursor-pointer hover:underline" v-for="(index, lang) in checkedLanguages" :key="index" @click="toggleLanguage(lang)">
+          <div class="flex">
+            <Checkbox v-model="checkedLanguages[lang]" /> 
+            {{ lang }}
+          </div>
+          <span class="flag-icon"
+            :class="`flag-icon-${getCountryCodeFromLangCode(lang)}`"
+          ></span>
         </div>
       </div>
     </div>
@@ -52,6 +58,8 @@
   import { computed, onMounted, ref, watch } from 'vue';
   import { callAdminForthApi } from '@/utils';
   import { useAdminforth } from '@/adminforth';
+  import { setLang, getCountryCodeFromLangCode, getLocalLang, setLocalLang } from './langCommon';
+
   const { t } = useI18n();
   const adminforth = useAdminforth();
 
