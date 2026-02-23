@@ -55,3 +55,4 @@ steps:
     commands:
       - . /woodpecker/deploy.vault.env
       - /bin/sh ./.woodpecker/buildSlackNotify.sh success
+      
