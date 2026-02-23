@@ -24,7 +24,7 @@
         class="flex gap-1 items-center py-1 px-3 text-sm font-medium text-lightListViewButtonText focus:outline-none bg-lightListViewButtonBackground rounded-default border border-lightListViewButtonBorder hover:bg-lightListViewButtonBackgroundHover hover:text-lightListViewButtonTextHover focus:z-10 focus:ring-4 focus:ring-lightListViewButtonFocusRing dark:focus:ring-darkListViewButtonFocusRing dark:bg-darkListViewButtonBackground dark:text-darkListViewButtonText dark:border-darkListViewButtonBorder dark:hover:text-darkListViewButtonTextHover dark:hover:bg-darkListViewButtonBackgroundHover"
       >
         <IconLanguageOutline class="w-5 h-5" />
-        {{ t('A Translate Selected') }} {{ `(${checkboxes.length})`  }}
+        {{ t('Translate Selected') }} {{ `(${checkboxes.length})`  }}
         <div class="text-white bg-gradient-to-r from-purple-500 via-purple-600 to-purple-700 hover:bg-gradient-to-br focus:ring-4 focus:outline-none focus:ring-purple-300 dark:focus:ring-purple-800 
           font-medium rounded-sm text-xs px-1 ml-1 text-center ">
           AI    

@@ -454,46 +454,6 @@ export default class I18nPlugin extends AdminForthPlugin {
 
     (resourceConfig.options.pageInjections.list.beforeActionButtons as AdminForthComponentDeclaration[]).push(pageInjection);
 
-    if (!resourceConfig.options.bulkActions) {
-      resourceConfig.options.bulkActions = [];
-    }
-    
-    if (this.options.completeAdapter) {
-      resourceConfig.options.bulkActions.push(
-        {
-          id: 'translate_all',
-          label: 'Translate selected',
-          icon: 'flowbite:language-outline',
-          badge: 'AI',
-          // if optional `confirm` is provided, user will be asked to confirm action
-          confirm: 'Are you sure you want to translate selected items? Only empty strings will be translated',
-          allowed: async ({ resource, adminUser, selectedIds, allowedActions }) => {
-            process.env.HEAVY_DEBUG && console.log('allowedActions', JSON.stringify(allowedActions));
-            return allowedActions.edit;
-          },
-          action: async ({ selectedIds, tr }) => {
-            let translatedCount = 0;
-            try {
-              translatedCount = await this.bulkTranslate({ selectedIds });
-            } catch (e) {
-              process.env.HEAVY_DEBUG && console.error('🪲⛔ bulkTranslate error', e);
-              if (e instanceof AiTranslateError) {
-                return { ok: false, error: e.message };
-              } 
-              throw e;
-            }
-            this.updateUntranslatedMenuBadge();
-            return { 
-              ok: true, 
-              error: undefined, 
-              successMessage: await tr(`Translated {count} items`, 'backend', {
-                count: translatedCount,
-              }),
-            };
-          }
-        }
-      );  
-    };
 
     // if there is menu item with resourceId, add .badge function showing number of untranslated strings
     const addBadgeCountToMenuItem = (menuItem: AdminForthConfigMenuItem) => {
