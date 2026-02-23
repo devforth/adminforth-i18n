@@ -433,6 +433,27 @@ export default class I18nPlugin extends AdminForthPlugin {
     }
 
     // add bulk action
+
+    const pageInjection = {
+      file: this.componentPath('BulkActionButton.vue'),
+      meta: {
+        supportedLanguages: this.options.supportedLanguages,
+        pluginInstanceId: this.pluginInstanceId,
+      }
+    }
+
+    if (!resourceConfig.options.pageInjections) {
+      resourceConfig.options.pageInjections = {};
+    }
+    if (!resourceConfig.options.pageInjections.list) {
+      resourceConfig.options.pageInjections.list = {};
+    }
+    if (!resourceConfig.options.pageInjections.list.beforeActionButtons) {
+      resourceConfig.options.pageInjections.list.beforeActionButtons = [];
+    }
+
+    (resourceConfig.options.pageInjections.list.beforeActionButtons as AdminForthComponentDeclaration[]).push(pageInjection);
+
     if (!resourceConfig.options.bulkActions) {
       resourceConfig.options.bulkActions = [];
     }
@@ -541,11 +562,28 @@ export default class I18nPlugin extends AdminForthPlugin {
     \`\`\`
     `;  
 
+    const jsonSchemaProperties = {};
+    strings.forEach(s => {
+      jsonSchemaProperties[s.en_string] = { type: 'string' };
+    });
+
+    const jsonSchemaRequired = strings.map(s => s.en_string);
+
     // call OpenAI
     const resp = await this.options.completeAdapter.complete(
       prompt,
       [],
       prompt.length * 2,
+      {
+        json_schema: {
+          name: "translation_response",
+          schema: {
+            type: "object",
+            properties: jsonSchemaProperties,
+            required: jsonSchemaRequired,
+          },
+        },
+      }
     );
 
     process.env.HEAVY_DEBUG && console.log(`🪲🔪LLM resp >> ${prompt.length}, <<${resp.content.length} :\n\n`, JSON.stringify(resp));
@@ -561,7 +599,7 @@ export default class I18nPlugin extends AdminForthPlugin {
     // ```
     let res;
     try {
-      res = resp.content.split("```json")[1].split("```")[0];
+      res = resp.content//.split("```json")[1].split("```")[0];
     } catch (e) {
       console.error(`Error in parsing LLM resp: ${resp}\n Prompt was: ${prompt}\n Resp was: ${JSON.stringify(resp)}`, );
       return [];
@@ -606,7 +644,7 @@ export default class I18nPlugin extends AdminForthPlugin {
   }
 
   // returns translated count
-  async bulkTranslate({ selectedIds }: { selectedIds: string[] }): Promise<number> {
+  async bulkTranslate({ selectedIds, selectedLanguages }: { selectedIds: string[], selectedLanguages?: SupportedLanguage[] }): Promise<number> {
 
     const needToTranslateByLang : Partial<
       Record<
@@ -619,8 +657,8 @@ export default class I18nPlugin extends AdminForthPlugin {
     > = {};
 
     const translations = await this.adminforth.resource(this.resourceConfig.resourceId).list(Filters.IN(this.primaryKeyFieldName, selectedIds));
-
-    for (const lang of this.options.supportedLanguages) {
+    const languagesToProcess = selectedLanguages || this.options.supportedLanguages;
+    for (const lang of languagesToProcess) {
       if (lang === 'en') {
         // all strings are in English, no need to translate
         continue;
@@ -1045,6 +1083,36 @@ export default class I18nPlugin extends AdminForthPlugin {
         const updatedRecord = await connector.getRecordByPrimaryKey(resource, recordId);
 
         return { record: updatedRecord };
+      }
+    });
+
+    server.endpoint({
+      method: 'POST',
+      path: `/plugin/${this.pluginInstanceId}/translate-selected-to-languages`,
+      noAuth: false,
+      handler: async ({ body, tr }) => {
+        const selectedLanguages = body.selectedLanguages;
+        const selectedIds = body.selectedIds;
+
+        let translatedCount = 0;
+        try {
+          console.log('🪲translate-selected-to-languages', { selectedLanguages, selectedIds });
+          translatedCount = await this.bulkTranslate({ selectedIds, selectedLanguages });
+        } catch (e) {
+          process.env.HEAVY_DEBUG && console.error('🪲⛔ bulkTranslate error', e);
+          if (e instanceof AiTranslateError) {
+            return { ok: false, error: e.message };
+          } 
+          throw e;
+        }
+        this.updateUntranslatedMenuBadge();
+        return { 
+          ok: true, 
+          error: undefined, 
+          successMessage: await tr(`Translated {count} items`, 'backend', {
+            count: translatedCount,
+          }),
+        };
       }
     });
 
