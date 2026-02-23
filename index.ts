@@ -926,12 +926,17 @@ export default class I18nPlugin extends AdminForthPlugin {
     svgFlagB64: string;
   }[]> {
     return Promise.all(this.options.supportedLanguages.map(async (lang) => {
+      const flagEmoji =
+        typeof getFlagEmoji === 'function'
+          ? getFlagEmoji
+          : getFlagEmoji.default;
+
       return {
         code: lang,
         nameOnNative: iso6391.getNativeName(getPrimaryLanguageCode(lang)),
         nameEnglish: iso6391.getName(getPrimaryLanguageCode(lang)),
         emojiFlag: getCountryCodeFromLangCode(lang).toUpperCase().replace(/./g, char => String.fromCodePoint(char.charCodeAt(0) + 127397)),
-        svgFlagB64: await (getFlagEmoji as any).default(getCountryCodeFromLangCode(lang)),
+        svgFlagB64: await flagEmoji(getCountryCodeFromLangCode(lang)),
       };
     }));
   }
