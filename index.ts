@@ -35,6 +35,8 @@ const countryISO31661ByLangISO6391 = {
   ja: 'jp', // Japanese → Japan
   uk: 'ua', // Ukrainian → Ukraine
   ur: 'pk', // Urdu → Pakistan
+  sr: 'rs', // Serbian → Serbia
+  da: 'dk' // Danish → Denmark
 };
 
 function getCountryCodeFromLangCode(lang: SupportedLanguage) {
@@ -930,6 +932,8 @@ export default class I18nPlugin extends AdminForthPlugin {
         typeof getFlagEmoji === 'function'
           ? getFlagEmoji
           : getFlagEmoji.default;
+      
+      console.log('🪲languagesList for lang:', lang, 'country code:', getCountryCodeFromLangCode(lang));
 
       return {
         code: lang,
