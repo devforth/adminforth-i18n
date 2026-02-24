@@ -1,6 +1,6 @@
 <template>
   <Dialog 
-    class="w-[500px]"
+    class="w-[600px]"
     :buttons="[
       { 
         label: 'Translate', 
@@ -32,18 +32,16 @@
       </button>
     </template>
 
-    <div class="grid grid-cols-2 gap-4 w-full">
+    <div class="grid grid-cols-2 gap-1 w-full">
       <Button @click="selectAll" :disabled="allChecked">{{ t('Select All') }}</Button>
       <Button @click="uncheckAll" :disabled="noneChecked">{{ t('Uncheck All') }}</Button>
-      <div class="col-span-2 grid grid-cols-3 gap-4 ">
-        <div class="group flex items-center justify-between cursor-pointer" v-for="(index, lang) in checkedLanguages" :key="index" @click="toggleLanguage(lang)">
-          <div class="flex items-center gap-2">
-            <Checkbox v-model="checkedLanguages[lang]" /> 
-            <span class="flag-icon"
-              :class="`flag-icon-${getCountryCodeFromLangCode(lang)}`"
-            ></span>
-            <span class="group-hover:underline">{{ getName(getCountryCodeFromLangCode(lang)) }}</span>
-          </div>
+      <div class="col-span-2 grid grid-cols-3 gap-1 mt-4">
+        <div class="group hover:bg-gray-100 dark:hover:bg-gray-700 px-2 py-2 flex items-center cursor-pointer" v-for="(index, lang) in checkedLanguages" :key="index" @click="toggleLanguage(lang)">
+          <Checkbox v-model="checkedLanguages[lang]" /> 
+          <span class="flag-icon mr-2"
+            :class="`flag-icon-${getCountryCodeFromLangCode(lang)}`"
+          ></span>
+          <span class="group-hover:text-gray-900 text-gray-600">{{ ISO6391.getName(lang.slice(0,2)) }} ({{ lang }})</span>
         </div>
       </div>
     </div>
@@ -60,6 +58,8 @@
   import { useAdminforth } from '@/adminforth';
   import { getCountryCodeFromLangCode } from './langCommon';
   import { getName, overwrite } from 'country-list';
+  import ISO6391 from 'iso-639-1';
+  import 'flag-icon-css/css/flag-icons.min.css';
 
   const { t } = useI18n();
   const adminforth = useAdminforth();
