@@ -949,7 +949,6 @@ export default class I18nPlugin extends AdminForthPlugin {
           ? getFlagEmoji
           : getFlagEmoji.default;
       
-      console.log('🪲languagesList for lang:', lang, 'country code:', getCountryCodeFromLangCode(lang));
 
       return {
         code: lang,
@@ -1078,7 +1077,6 @@ export default class I18nPlugin extends AdminForthPlugin {
 
         let translatedCount = 0;
         try {
-          console.log('🪲translate-selected-to-languages', { selectedLanguages, selectedIds });
           translatedCount = await this.bulkTranslate({ selectedIds, selectedLanguages });
         } catch (e) {
           process.env.HEAVY_DEBUG && console.error('🪲⛔ bulkTranslate error', e);
