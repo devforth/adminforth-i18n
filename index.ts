@@ -8,7 +8,7 @@ import fs from 'fs-extra';
 import chokidar from 'chokidar';
 import  { AsyncQueue } from '@sapphire/async-queue';
 import getFlagEmoji from 'country-flag-svg';
-
+import { parse } from 'bcp-47'
 
 const processFrontendMessagesQueue = new AsyncQueue();
 
@@ -52,15 +52,20 @@ function getPrimaryLanguageCode(langCode: SupportedLanguage): string {
 }
 
 function isValidSupportedLanguageTag(langCode: SupportedLanguage): boolean {
-  const [primary, region] = String(langCode).split('-');
-  if (!iso6391.validate(primary as any)) {
+  try {
+    const schema = parse(String(langCode), 
+      { 
+        normalize: true, 
+        warning: (reason, code, offset) => {
+          console.warn(`Warning in validating language tag ${langCode}: reason=${reason}, code=${code}, offset=${offset}`);
+        }
+      }
+    );
+    const isValid = schema && schema.language && schema.language.length === 2;
+    return !!isValid;
+  } catch (e) {
     return false;
   }
-  if (!region) {
-    return true;
-  }
-  const regionUpper = region.toUpperCase();
-  return /^[A-Z]{2}$/.test(regionUpper) && (regionUpper in iso31661Alpha2ToAlpha3);
 }
 
 
