@@ -10,7 +10,7 @@ export type SupportedLanguage = LanguageCode | Bcp47LanguageTag;
 
 export interface PluginOptions {
 
-  /* List of ISO 639-1 language codes which you want to tsupport*/
+  /* List of language codes which you want to support. Can be either short ISO 639-1 language codes or/and BCP47 tags */
   supportedLanguages: SupportedLanguage[];
 
   /**
@@ -68,4 +68,10 @@ export interface PluginOptions {
    * Defaults to 'en' if not specified.
    */
   primaryLanguage?: SupportedLanguage;
+
+  /**
+    *  Ask translator to treat some code from supportedLanguages as exact BCP47 tag. Read docs for details.
+    *  key - one of the values form supportedLanguages, value -BCP47 tag
+    */
+  translateLangAsBCP47Code?: Partial<Record<LanguageCode, Bcp47LanguageTag>>;
 }

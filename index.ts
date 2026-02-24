@@ -8,7 +8,7 @@ import fs from 'fs-extra';
 import chokidar from 'chokidar';
 import  { AsyncQueue } from '@sapphire/async-queue';
 import getFlagEmoji from 'country-flag-svg';
-import { parse } from 'bcp-47'
+import { parse } from 'bcp-47';
 
 const processFrontendMessagesQueue = new AsyncQueue();
 
@@ -171,6 +171,14 @@ export default class I18nPlugin extends AdminForthPlugin {
         throw new Error(`Invalid language code ${lang}. Use ISO 639-1 (e.g., 'en') or BCP-47 with region (e.g., 'en-GB').`);
       }
     });
+
+    if (this.options.translateLangAsBCP47Code) {
+      for (const [lang, bcp47] of Object.entries(this.options.translateLangAsBCP47Code)) {
+        if (!this.options.supportedLanguages.includes(lang as SupportedLanguage)) {
+          throw new Error(`Invalid language code ${lang} in translateLangAsBCP47Code. It must be one of the supportedLanguages.`);
+        }
+      }
+    }
 
     this.externalAppOnly = this.options.externalAppOnly === true;
 
@@ -440,46 +448,27 @@ export default class I18nPlugin extends AdminForthPlugin {
     }
 
     // add bulk action
-    if (!resourceConfig.options.bulkActions) {
-      resourceConfig.options.bulkActions = [];
+
+    const pageInjection = {
+      file: this.componentPath('BulkActionButton.vue'),
+      meta: {
+        supportedLanguages: this.options.supportedLanguages,
+        pluginInstanceId: this.pluginInstanceId,
+      }
     }
-    
-    if (this.options.completeAdapter) {
-      resourceConfig.options.bulkActions.push(
-        {
-          id: 'translate_all',
-          label: 'Translate selected',
-          icon: 'flowbite:language-outline',
-          badge: 'AI',
-          // if optional `confirm` is provided, user will be asked to confirm action
-          confirm: 'Are you sure you want to translate selected items? Only empty strings will be translated',
-          allowed: async ({ resource, adminUser, selectedIds, allowedActions }) => {
-            process.env.HEAVY_DEBUG && console.log('allowedActions', JSON.stringify(allowedActions));
-            return allowedActions.edit;
-          },
-          action: async ({ selectedIds, tr }) => {
-            let translatedCount = 0;
-            try {
-              translatedCount = await this.bulkTranslate({ selectedIds });
-            } catch (e) {
-              process.env.HEAVY_DEBUG && console.error('🪲⛔ bulkTranslate error', e);
-              if (e instanceof AiTranslateError) {
-                return { ok: false, error: e.message };
-              } 
-              throw e;
-            }
-            this.updateUntranslatedMenuBadge();
-            return { 
-              ok: true, 
-              error: undefined, 
-              successMessage: await tr(`Translated {count} items`, 'backend', {
-                count: translatedCount,
-              }),
-            };
-          }
-        }
-      );  
-    };
+
+    if (!resourceConfig.options.pageInjections) {
+      resourceConfig.options.pageInjections = {};
+    }
+    if (!resourceConfig.options.pageInjections.list) {
+      resourceConfig.options.pageInjections.list = {};
+    }
+    if (!resourceConfig.options.pageInjections.list.beforeActionButtons) {
+      resourceConfig.options.pageInjections.list.beforeActionButtons = [];
+    }
+
+    (resourceConfig.options.pageInjections.list.beforeActionButtons as AdminForthComponentDeclaration[]).push(pageInjection);
+
 
     // if there is menu item with resourceId, add .badge function showing number of untranslated strings
     const addBadgeCountToMenuItem = (menuItem: AdminForthConfigMenuItem) => {
@@ -517,6 +506,7 @@ export default class I18nPlugin extends AdminForthPlugin {
       return [];
     }
 
+    const replacedLanguageCodeForTranslations = this.options.translateLangAsBCP47Code && langIsoCode.length === 2 ? this.options.translateLangAsBCP47Code[langIsoCode as any] : null;
     if (strings.length > maxKeysInOneReq) {
       let totalTranslated = [];
       for (let i = 0; i < strings.length; i += maxKeysInOneReq) {
@@ -527,14 +517,15 @@ export default class I18nPlugin extends AdminForthPlugin {
       }
       return totalTranslated;
     }
+    const langCode = replacedLanguageCodeForTranslations ? replacedLanguageCodeForTranslations : langIsoCode;
     const lang = langIsoCode;
     const primaryLang = getPrimaryLanguageCode(lang);
     const langName = iso6391.getName(primaryLang);
     const requestSlavicPlurals = Object.keys(SLAVIC_PLURAL_EXAMPLES).includes(primaryLang) && plurals;
     const region = String(lang).split('-')[1]?.toUpperCase() || '';
     const prompt = `
-        I need to translate strings in JSON to ${langName} language (ISO 639-1 code ${lang}) from English for my web app.
-        ${region ? `Use the regional conventions for ${lang} (region ${region}), including spelling, punctuation, and formatting.` : ''}
+        I need to translate strings in JSON to ${langName} language ${replacedLanguageCodeForTranslations || lang.length > 2 ? `BCP-47 code ${langCode}` : `ISO 639-1 code ${langIsoCode}`} from English for my web app.
+        ${region ? `Use the regional conventions for ${langCode} (region ${region}), including spelling, punctuation, and formatting.` : ''}
         ${requestSlavicPlurals ? `You should provide 4 slavic forms (in format "zero count | singular count | 2-4 | 5+") e.g. "apple | apples" should become "${SLAVIC_PLURAL_EXAMPLES[lang]}"` : ''}
         Keep keys, as is, write translation into values! If keys have variables (in curly brackets), then translated strings should have them as well (variables itself should not be translated). Here are the strings:
 
@@ -548,11 +539,31 @@ export default class I18nPlugin extends AdminForthPlugin {
     \`\`\`
     `;  
 
+    const jsonSchemaProperties = {};
+    strings.forEach(s => {
+      jsonSchemaProperties[s.en_string] = { 
+        type: 'string',
+        minLength: 1,
+      };
+    });
+
+    const jsonSchemaRequired = strings.map(s => s.en_string);
+
     // call OpenAI
     const resp = await this.options.completeAdapter.complete(
       prompt,
       [],
       prompt.length * 2,
+      {
+        json_schema: {
+          name: "translation_response",
+          schema: {
+            type: "object",
+            properties: jsonSchemaProperties,
+            required: jsonSchemaRequired,
+          },
+        },
+      }
     );
 
     process.env.HEAVY_DEBUG && console.log(`🪲🔪LLM resp >> ${prompt.length}, <<${resp.content.length} :\n\n`, JSON.stringify(resp));
@@ -568,7 +579,7 @@ export default class I18nPlugin extends AdminForthPlugin {
     // ```
     let res;
     try {
-      res = resp.content.split("```json")[1].split("```")[0];
+      res = resp.content//.split("```json")[1].split("```")[0];
     } catch (e) {
       console.error(`Error in parsing LLM resp: ${resp}\n Prompt was: ${prompt}\n Resp was: ${JSON.stringify(resp)}`, );
       return [];
@@ -613,7 +624,7 @@ export default class I18nPlugin extends AdminForthPlugin {
   }
 
   // returns translated count
-  async bulkTranslate({ selectedIds }: { selectedIds: string[] }): Promise<number> {
+  async bulkTranslate({ selectedIds, selectedLanguages }: { selectedIds: string[], selectedLanguages?: SupportedLanguage[] }): Promise<number> {
 
     const needToTranslateByLang : Partial<
       Record<
@@ -626,8 +637,8 @@ export default class I18nPlugin extends AdminForthPlugin {
     > = {};
 
     const translations = await this.adminforth.resource(this.resourceConfig.resourceId).list(Filters.IN(this.primaryKeyFieldName, selectedIds));
-
-    for (const lang of this.options.supportedLanguages) {
+    const languagesToProcess = selectedLanguages || this.options.supportedLanguages;
+    for (const lang of languagesToProcess) {
       if (lang === 'en') {
         // all strings are in English, no need to translate
         continue;
@@ -1054,6 +1065,36 @@ export default class I18nPlugin extends AdminForthPlugin {
         const updatedRecord = await connector.getRecordByPrimaryKey(resource, recordId);
 
         return { record: updatedRecord };
+      }
+    });
+
+    server.endpoint({
+      method: 'POST',
+      path: `/plugin/${this.pluginInstanceId}/translate-selected-to-languages`,
+      noAuth: false,
+      handler: async ({ body, tr }) => {
+        const selectedLanguages = body.selectedLanguages;
+        const selectedIds = body.selectedIds;
+
+        let translatedCount = 0;
+        try {
+          console.log('🪲translate-selected-to-languages', { selectedLanguages, selectedIds });
+          translatedCount = await this.bulkTranslate({ selectedIds, selectedLanguages });
+        } catch (e) {
+          process.env.HEAVY_DEBUG && console.error('🪲⛔ bulkTranslate error', e);
+          if (e instanceof AiTranslateError) {
+            return { ok: false, error: e.message };
+          } 
+          throw e;
+        }
+        this.updateUntranslatedMenuBadge();
+        return { 
+          ok: true, 
+          error: undefined, 
+          successMessage: await tr(`Translated {count} items`, 'backend', {
+            count: translatedCount,
+          }),
+        };
       }
     });
 

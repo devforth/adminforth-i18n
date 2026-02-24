@@ -11,5 +11,8 @@
   "description": "",
   "devDependencies": {
     "flag-icon-css": "^4.1.7"
+  },
+  "dependencies": {
+    "country-list": "^2.4.1"
   }
 }
