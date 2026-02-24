@@ -526,7 +526,10 @@ export default class I18nPlugin extends AdminForthPlugin {
 
     const jsonSchemaProperties = {};
     strings.forEach(s => {
-      jsonSchemaProperties[s.en_string] = { type: 'string' };
+      jsonSchemaProperties[s.en_string] = { 
+        type: 'string',
+        minLength: 1,
+      };
     });
 
     const jsonSchemaRequired = strings.map(s => s.en_string);
