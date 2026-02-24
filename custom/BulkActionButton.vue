@@ -37,13 +37,13 @@
       <Button @click="uncheckAll" :disabled="noneChecked">{{ t('Uncheck All') }}</Button>
       <div class="col-span-2 grid grid-cols-3 gap-4 ">
         <div class="group flex items-center justify-between cursor-pointer" v-for="(index, lang) in checkedLanguages" :key="index" @click="toggleLanguage(lang)">
-          <div class="flex">
+          <div class="flex items-center gap-2">
             <Checkbox v-model="checkedLanguages[lang]" /> 
+            <span class="flag-icon"
+              :class="`flag-icon-${getCountryCodeFromLangCode(lang)}`"
+            ></span>
             <span class="group-hover:underline">{{ getName(getCountryCodeFromLangCode(lang)) }}</span>
           </div>
-          <span class="flag-icon"
-            :class="`flag-icon-${getCountryCodeFromLangCode(lang)}`"
-          ></span>
         </div>
       </div>
     </div>
