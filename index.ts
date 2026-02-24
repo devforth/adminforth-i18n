@@ -493,6 +493,7 @@ export default class I18nPlugin extends AdminForthPlugin {
       return [];
     }
 
+    const replacedLanguageCodeForTranslations = this.options.additionalTranslationBCP47.find(l => l.slice(0, 2) === langIsoCode.slice(0, 2)) || langIsoCode;
     if (strings.length > maxKeysInOneReq) {
       let totalTranslated = [];
       for (let i = 0; i < strings.length; i += maxKeysInOneReq) {
@@ -503,14 +504,15 @@ export default class I18nPlugin extends AdminForthPlugin {
       }
       return totalTranslated;
     }
+    const langCode = replacedLanguageCodeForTranslations ? replacedLanguageCodeForTranslations : langIsoCode;
     const lang = langIsoCode;
     const primaryLang = getPrimaryLanguageCode(lang);
     const langName = iso6391.getName(primaryLang);
     const requestSlavicPlurals = Object.keys(SLAVIC_PLURAL_EXAMPLES).includes(primaryLang) && plurals;
     const region = String(lang).split('-')[1]?.toUpperCase() || '';
     const prompt = `
-        I need to translate strings in JSON to ${langName} language (ISO 639-1 code ${lang}) from English for my web app.
-        ${region ? `Use the regional conventions for ${lang} (region ${region}), including spelling, punctuation, and formatting.` : ''}
+        I need to translate strings in JSON to ${langName} language (ISO 639-1 code ${langIsoCode}) (BCP-47 code ${langCode}) from English for my web app.
+        ${region ? `Use the regional conventions for ${langCode} (region ${region}), including spelling, punctuation, and formatting.` : ''}
         ${requestSlavicPlurals ? `You should provide 4 slavic forms (in format "zero count | singular count | 2-4 | 5+") e.g. "apple | apples" should become "${SLAVIC_PLURAL_EXAMPLES[lang]}"` : ''}
         Keep keys, as is, write translation into values! If keys have variables (in curly brackets), then translated strings should have them as well (variables itself should not be translated). Here are the strings:
 

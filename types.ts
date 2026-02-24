@@ -68,4 +68,13 @@ export interface PluginOptions {
    * Defaults to 'en' if not specified.
    */
   primaryLanguage?: SupportedLanguage;
+
+
+  /**
+   * Additional language codes for translation generation
+   * When using the completeAdapter for generating translations, 
+   * you can specify additional language codes to generate translations for.
+   * Example: sr-Latn for Serbian in Latin script, while primaryLanguage can be sr for Serbian in Cyrillic script.
+   */
+  additionalTranslationBCP47?: SupportedLanguage[];
 }
