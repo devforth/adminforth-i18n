@@ -74,4 +74,11 @@ export interface PluginOptions {
     *  key - one of the values form supportedLanguages, value -BCP47 tag
     */
   translateLangAsBCP47Code?: Partial<Record<LanguageCode, Bcp47LanguageTag>>;
+
+  /**
+   *  Batch size of one translation generation request. 
+   *  This is an optional parameter that can be used to control the size of strings sent in a single request to the completion adapter.
+   *  Default value is 30000 tokens
+   */
+  inputTokensPerBatch?: number;
 }

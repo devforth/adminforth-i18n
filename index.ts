@@ -9,6 +9,7 @@ import chokidar from 'chokidar';
 import  { AsyncQueue } from '@sapphire/async-queue';
 import getFlagEmoji from 'country-flag-svg';
 import { parse } from 'bcp-47';
+import pLimit from 'p-limit';
 
 const processFrontendMessagesQueue = new AsyncQueue();
 
@@ -494,51 +495,17 @@ export default class I18nPlugin extends AdminForthPlugin {
     });
   }
 
-  async translateToLang (
-      langIsoCode: SupportedLanguage, 
-      strings: { en_string: string, category: string }[], 
-      plurals=false,
-      translations: any[],
-      updateStrings: Record<string, { updates: any, category: string, strId: string, enStr: string, translatedStr: string }> = {}
-  ): Promise<string[]> {
-    const maxKeysInOneReq = 10;
-    if (strings.length === 0) {
-      return [];
-    }
+  async generateAndSaveBunch (
+    prompt: String,
+    strings: { en_string: string, category: string }[], 
+    translations: any[],
+    updateStrings: Record<string, { updates: any, category: string, strId: string, enStr: string, translatedStr: string }> = {},
+    lang: String,
+  ): Promise<void>{
 
-    const replacedLanguageCodeForTranslations = this.options.translateLangAsBCP47Code && langIsoCode.length === 2 ? this.options.translateLangAsBCP47Code[langIsoCode as any] : null;
-    if (strings.length > maxKeysInOneReq) {
-      let totalTranslated = [];
-      for (let i = 0; i < strings.length; i += maxKeysInOneReq) {
-        const slicedStrings = strings.slice(i, i + maxKeysInOneReq);
-        process.env.HEAVY_DEBUG && console.log('🪲🔪slicedStrings len', slicedStrings.length);
-        const madeKeys = await this.translateToLang(langIsoCode, slicedStrings, plurals, translations, updateStrings);
-        totalTranslated = totalTranslated.concat(madeKeys);
-      }
-      return totalTranslated;
-    }
-    const langCode = replacedLanguageCodeForTranslations ? replacedLanguageCodeForTranslations : langIsoCode;
-    const lang = langIsoCode;
-    const primaryLang = getPrimaryLanguageCode(lang);
-    const langName = iso6391.getName(primaryLang);
-    const requestSlavicPlurals = Object.keys(SLAVIC_PLURAL_EXAMPLES).includes(primaryLang) && plurals;
-    const region = String(lang).split('-')[1]?.toUpperCase() || '';
-    const prompt = `
-        I need to translate strings in JSON to ${langName} language ${replacedLanguageCodeForTranslations || lang.length > 2 ? `BCP-47 code ${langCode}` : `ISO 639-1 code ${langIsoCode}`} from English for my web app.
-        ${region ? `Use the regional conventions for ${langCode} (region ${region}), including spelling, punctuation, and formatting.` : ''}
-        ${requestSlavicPlurals ? `You should provide 4 slavic forms (in format "zero count | singular count | 2-4 | 5+") e.g. "apple | apples" should become "${SLAVIC_PLURAL_EXAMPLES[lang]}"` : ''}
-        Keep keys, as is, write translation into values! If keys have variables (in curly brackets), then translated strings should have them as well (variables itself should not be translated). Here are the strings:
+    console.log('Call generateAndSaveBunch with prompt --->', prompt)
 
-        \`\`\`json
-        ${
-        JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object => {
-          acc[s.en_string] = '';
-          return acc;
-        }, {}), null, 2)
-        }
-    \`\`\`
-    `;  
-
+    // return [];
     const jsonSchemaProperties = {};
     strings.forEach(s => {
       jsonSchemaProperties[s.en_string] = { 
@@ -548,7 +515,6 @@ export default class I18nPlugin extends AdminForthPlugin {
     });
 
     const jsonSchemaRequired = strings.map(s => s.en_string);
-
     // call OpenAI
     const resp = await this.options.completeAdapter.complete(
       prompt,
@@ -582,17 +548,18 @@ export default class I18nPlugin extends AdminForthPlugin {
       res = resp.content//.split("```json")[1].split("```")[0];
     } catch (e) {
       console.error(`Error in parsing LLM resp: ${resp}\n Prompt was: ${prompt}\n Resp was: ${JSON.stringify(resp)}`, );
-      return [];
+      return null;
     }
 
     try {
       res = JSON.parse(res);
     } catch (e) {
       console.error(`Error in parsing LLM resp json: ${resp}\n Prompt was: ${prompt}\n Resp was: ${JSON.stringify(resp)}`, );
-      return [];
+      return null;
     }
 
 
+    console.log('Translation response:', res)
     for (const [enStr, translatedStr] of Object.entries(res) as [string, string][]) {
       const translationsTargeted = translations.filter(t => t[this.enFieldName] === enStr);
       // might be several with same en_string
@@ -619,7 +586,103 @@ export default class I18nPlugin extends AdminForthPlugin {
         ].updates[this.trFieldNames[lang]] = translatedStr;
       }
     }
+  }
 
+  async translateToLang (
+      langIsoCode: SupportedLanguage, 
+      strings: { en_string: string, category: string }[], 
+      plurals=false,
+      translations: any[],
+      updateStrings: Record<string, { updates: any, category: string, strId: string, enStr: string, translatedStr: string }> = {}
+  ): Promise<string[]> {
+
+    const maxInputTokens = this.options.inputTokensPerBatch ?? 30000;
+
+    const limit = pLimit(10); 
+    const enStringsTokenLengthCache = {};
+
+    const tokenLengthPerString = async (str: string): Promise<number> => {
+      if (!enStringsTokenLengthCache[str]) {
+        enStringsTokenLengthCache[str] = await this.options.completeAdapter.measureTokensCount(`"${str}":"",`);
+      }
+      return enStringsTokenLengthCache[str];
+    }
+    const promises = strings.map(s => limit(() => tokenLengthPerString(s.en_string)));
+
+    await Promise.all(promises);
+
+    if (strings.length === 0) {
+      return [];
+    }
+
+    const replacedLanguageCodeForTranslations = this.options.translateLangAsBCP47Code && langIsoCode.length === 2 ? this.options.translateLangAsBCP47Code[langIsoCode as any] : null;
+
+    const langCode = replacedLanguageCodeForTranslations ? replacedLanguageCodeForTranslations : langIsoCode;
+    const lang = langIsoCode;
+    const primaryLang = getPrimaryLanguageCode(lang);
+    const langName = iso6391.getName(primaryLang);
+    const requestSlavicPlurals = Object.keys(SLAVIC_PLURAL_EXAMPLES).includes(primaryLang) && plurals;
+    const region = String(lang).split('-')[1]?.toUpperCase() || '';
+    const basePrompt = `
+      I need to translate strings in JSON to ${langName} language ${replacedLanguageCodeForTranslations || lang.length > 2 ? `BCP-47 code ${langCode}` : `ISO 639-1 code ${langIsoCode}`} from English for my web app.
+      ${region ? `Use the regional conventions for ${langCode} (region ${region}), including spelling, punctuation, and formatting.` : ''}
+      ${requestSlavicPlurals ? `You should provide 4 slavic forms (in format "zero count | singular count | 2-4 | 5+") e.g. "apple | apples" should become "${SLAVIC_PLURAL_EXAMPLES[lang]}"` : ''}
+      Keep keys, as is, write translation into values! If keys have variables (in curly brackets), then translated strings should have them as well (variables itself should not be translated). Here are the strings:
+      \`\`\`json
+
+      \`\`\`
+    `;
+    
+    const basePromptTokenLength = await this.options.completeAdapter.measureTokensCount(basePrompt);
+    const allowedTokensAmountForFields = maxInputTokens - basePromptTokenLength;
+    const stringsToTranslate = strings.map( s => s.en_string);
+    const generationTasks = []
+    while (stringsToTranslate.length !== 0) {
+      let stringBanch = [];
+      let banchTokens = 0;
+      for (const string of stringsToTranslate) {
+        if( banchTokens + enStringsTokenLengthCache[string] <= allowedTokensAmountForFields ) {
+          stringBanch.push(string);
+          banchTokens += enStringsTokenLengthCache[string];
+        } else {
+          continue;
+        }
+      }
+      if ( stringBanch.length === 0 ) {
+        break;
+      }
+      for ( const string of stringBanch) {
+        const index = stringsToTranslate.indexOf(string);
+        if (index !== -1) {
+          stringsToTranslate.splice(index, 1);
+        }
+      }
+      const promptToGenerate = basePrompt.split(`\`\`\`json`)[0] + 
+        `\`\`\`json${
+          stringBanch.map(s => `"${s}": ""`)
+          }
+        \`\`\``;
+      // await new Promise(resolve => setTimeout(resolve, 1000));
+      const stringBanchCopy = [...stringBanch];
+      generationTasks.push(
+        this.generateAndSaveBunch(
+          promptToGenerate,
+          strings.filter(s => stringBanchCopy.includes(s.en_string)),
+          translations.filter(t => stringBanchCopy.includes(t.en_string)),
+          updateStrings,
+          lang
+        )
+      ) 
+    }
+
+    await Promise.all(generationTasks);
+
+
+
+
+    if (allowedTokensAmountForFields < 0) {
+      throw new AiTranslateError("Not enought input generation tokens")
+    }
     return Object.keys(updateStrings);
   }
 
