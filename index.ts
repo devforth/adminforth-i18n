@@ -503,7 +503,6 @@ export default class I18nPlugin extends AdminForthPlugin {
     lang: String,
   ): Promise<void>{
 
-    console.log('Call generateAndSaveBunch with prompt --->', prompt)
 
     // return [];
     const jsonSchemaProperties = {};
@@ -559,7 +558,6 @@ export default class I18nPlugin extends AdminForthPlugin {
     }
 
 
-    console.log('Translation response:', res)
     for (const [enStr, translatedStr] of Object.entries(res) as [string, string][]) {
       const translationsTargeted = translations.filter(t => t[this.enFieldName] === enStr);
       // might be several with same en_string
