@@ -61,8 +61,8 @@ function isValidSupportedLanguageTag(langCode: SupportedLanguage): boolean {
         }
       }
     );
-    const isValid = schema && schema.language && schema.language.length === 2;
-    return !!isValid;
+    const isValid = schema.language.length === 2;
+    return isValid;
   } catch (e) {
     return false;
   }

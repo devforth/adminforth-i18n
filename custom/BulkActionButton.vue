@@ -32,16 +32,16 @@
       </button>
     </template>
 
-    <div class="grid grid-cols-2 gap-1 w-full">
+    <div class="af-i18n-translations-selector grid grid-cols-2 gap-1 w-full">
       <Button @click="selectAll" :disabled="allChecked">{{ t('Select All') }}</Button>
       <Button @click="uncheckAll" :disabled="noneChecked">{{ t('Uncheck All') }}</Button>
       <div class="col-span-2 grid grid-cols-3 gap-1 mt-4">
-        <div class="group hover:bg-gray-100 dark:hover:bg-gray-700 px-2 py-2 flex items-center cursor-pointer" v-for="(index, lang) in checkedLanguages" :key="index" @click="toggleLanguage(lang)">
+        <div class="group hover:bg-gray-100 dark:hover:bg-gray-600 px-2 py-2 flex items-center cursor-pointer" v-for="(index, lang) in checkedLanguages" :key="index" @click="toggleLanguage(lang)">
           <Checkbox v-model="checkedLanguages[lang]" /> 
           <span class="flag-icon mr-2"
             :class="`flag-icon-${getCountryCodeFromLangCode(lang)}`"
           ></span>
-          <span class="group-hover:text-gray-900 text-gray-600">{{ ISO6391.getName(lang.slice(0,2)) }} ({{ lang }})</span>
+          <span class="group-hover:text-gray-900 text-gray-600 dark:text-white dark:group-hover:text-gray-200">{{ ISO6391.getName(lang.slice(0,2)) }} ({{ lang }})</span>
         </div>
       </div>
     </div>
