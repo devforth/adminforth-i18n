@@ -10,6 +10,7 @@ import  { AsyncQueue } from '@sapphire/async-queue';
 import getFlagEmoji from 'country-flag-svg';
 import { parse } from 'bcp-47';
 import pLimit from 'p-limit';
+import { randomUUID } from 'crypto';
 
 const processFrontendMessagesQueue = new AsyncQueue();
 
@@ -67,6 +68,12 @@ function isValidSupportedLanguageTag(langCode: SupportedLanguage): boolean {
   } catch (e) {
     return false;
   }
+}
+
+interface IFailedTranslation {
+  lang: SupportedLanguage;
+  en_string: string;
+  failedReason: string;
 }
 
 
@@ -496,11 +503,12 @@ export default class I18nPlugin extends AdminForthPlugin {
   }
 
   async generateAndSaveBunch (
-    prompt: String,
+    prompt: string,
     strings: { en_string: string, category: string }[], 
     translations: any[],
     updateStrings: Record<string, { updates: any, category: string, strId: string, enStr: string, translatedStr: string }> = {},
-    lang: String,
+    lang: string,
+    failedToTranslate: IFailedTranslation[],
   ): Promise<void>{
 
 
@@ -547,6 +555,13 @@ export default class I18nPlugin extends AdminForthPlugin {
       res = resp.content//.split("```json")[1].split("```")[0];
     } catch (e) {
       console.error(`Error in parsing LLM resp: ${resp}\n Prompt was: ${prompt}\n Resp was: ${JSON.stringify(resp)}`, );
+      strings.forEach(s => {
+        failedToTranslate.push({
+          lang: lang as SupportedLanguage,
+          en_string: s.en_string,
+          failedReason: "Error in parsing LLM response"
+        });
+      });
       return null;
     }
 
@@ -554,6 +569,13 @@ export default class I18nPlugin extends AdminForthPlugin {
       res = JSON.parse(res);
     } catch (e) {
       console.error(`Error in parsing LLM resp json: ${resp}\n Prompt was: ${prompt}\n Resp was: ${JSON.stringify(resp)}`, );
+      strings.forEach(s => {
+        failedToTranslate.push({
+          lang: lang as SupportedLanguage,
+          en_string: s.en_string,
+          failedReason: "Error in parsing LLM response JSON"
+        });
+      });
       return null;
     }
 
@@ -592,25 +614,27 @@ export default class I18nPlugin extends AdminForthPlugin {
       plurals=false,
       translations: any[],
       updateStrings: Record<string, { updates: any, category: string, strId: string, enStr: string, translatedStr: string }> = {}
-  ): Promise<string[]> {
+  ): Promise<{ updatedKeys: string[], failedToTranslate: IFailedTranslation[] }> {
 
     const maxInputTokens = this.options.inputTokensPerBatch ?? 30000;
 
     const limit = pLimit(10); 
-    const enStringsTokenLengthCache = {};
+    const enStringsTokenLengthCache: Record<string, any>[] = [];
+    
 
-    const tokenLengthPerString = async (str: string): Promise<number> => {
-      if (!enStringsTokenLengthCache[str]) {
-        enStringsTokenLengthCache[str] = await this.options.completeAdapter.measureTokensCount(`"${str}":"",`);
-      }
-      return enStringsTokenLengthCache[str];
+    const tokenLengthPerString = async (str: string): Promise<void> => {
+      const objectToPush = {
+        en_string: str,
+        numOfTokens: await this.options.completeAdapter.measureTokensCount(`"${str}":"",`)
+      };
+      enStringsTokenLengthCache.push(objectToPush);
     }
     const promises = strings.map(s => limit(() => tokenLengthPerString(s.en_string)));
 
     await Promise.all(promises);
 
     if (strings.length === 0) {
-      return [];
+      return { updatedKeys: [], failedToTranslate: [] };
     }
 
     const replacedLanguageCodeForTranslations = this.options.translateLangAsBCP47Code && langIsoCode.length === 2 ? this.options.translateLangAsBCP47Code[langIsoCode as any] : null;
@@ -631,22 +655,31 @@ export default class I18nPlugin extends AdminForthPlugin {
       \`\`\`
     `;
     
+    const failedToTranslate: IFailedTranslation[] = [];
     const basePromptTokenLength = await this.options.completeAdapter.measureTokensCount(basePrompt);
     const allowedTokensAmountForFields = maxInputTokens - basePromptTokenLength;
     const stringsToTranslate = strings.map( s => s.en_string);
     const generationTasks = []
     while (stringsToTranslate.length !== 0) {
-      let stringBanch = [];
+      const stringBanch = [];
       let banchTokens = 0;
       for (const string of stringsToTranslate) {
-        if( banchTokens + enStringsTokenLengthCache[string] <= allowedTokensAmountForFields ) {
+        const numberOfTokensForString = enStringsTokenLengthCache.find(cache => cache.en_string === string)?.numOfTokens || 0;
+        if( banchTokens + numberOfTokensForString <= allowedTokensAmountForFields ) {
           stringBanch.push(string);
-          banchTokens += enStringsTokenLengthCache[string];
+          banchTokens += numberOfTokensForString;
         } else {
           continue;
         }
       }
       if ( stringBanch.length === 0 ) {
+        stringsToTranslate.forEach(s => {
+          failedToTranslate.push({
+            lang,
+            en_string: s,
+            failedReason: "Not enough input generation tokens"
+          });
+        });
         break;
       }
       for ( const string of stringBanch) {
@@ -668,7 +701,8 @@ export default class I18nPlugin extends AdminForthPlugin {
           strings.filter(s => stringBanchCopy.includes(s.en_string)),
           translations.filter(t => stringBanchCopy.includes(t.en_string)),
           updateStrings,
-          lang
+          lang,
+          failedToTranslate
         )
       ) 
     }
@@ -681,12 +715,21 @@ export default class I18nPlugin extends AdminForthPlugin {
     if (allowedTokensAmountForFields < 0) {
       throw new AiTranslateError("Not enought input generation tokens")
     }
-    return Object.keys(updateStrings);
+    return { updatedKeys: Object.keys(updateStrings), failedToTranslate };
   }
 
-  // returns translated count
-  async bulkTranslate({ selectedIds, selectedLanguages }: { selectedIds: string[], selectedLanguages?: SupportedLanguage[] }): Promise<number> {
 
+  // returns translated count
+  async bulkTranslate({ selectedIds, selectedLanguages }: 
+    { 
+      selectedIds: string[], 
+      selectedLanguages?: SupportedLanguage[] 
+    }): 
+      Promise<{
+        totalTranslated: number, 
+        failedToTranslate: IFailedTranslation[]
+      }> 
+    {
     const needToTranslateByLang : Partial<
       Record<
         SupportedLanguage,
@@ -729,20 +772,22 @@ export default class I18nPlugin extends AdminForthPlugin {
     const langsInvolved = new Set(Object.keys(needToTranslateByLang));
 
     let totalTranslated = [];
+    let failedToTranslate: IFailedTranslation[] = [];
 
     await Promise.all(
       Object.entries(needToTranslateByLang).map(
         async ([lang, strings]: [SupportedLanguage, { en_string: string, category: string }[]]) => {
           // first translate without plurals
           const stringsWithoutPlurals = strings.filter(s => !s.en_string.includes('|'));
-          const noPluralKeys = await this.translateToLang(lang, stringsWithoutPlurals, false, translations, updateStrings);
+          const { updatedKeys: noPluralKeys, failedToTranslate: failedNoPlural } = await this.translateToLang(lang, stringsWithoutPlurals, false, translations, updateStrings);
 
 
           const stringsWithPlurals = strings.filter(s => s.en_string.includes('|'));
 
-          const pluralKeys = await this.translateToLang(lang, stringsWithPlurals, true, translations, updateStrings);
+          const { updatedKeys: pluralKeys, failedToTranslate: failedPlural } = await this.translateToLang(lang, stringsWithPlurals, true, translations, updateStrings);
 
           totalTranslated = totalTranslated.concat(noPluralKeys, pluralKeys);
+          failedToTranslate = failedToTranslate.concat(failedNoPlural, failedPlural);
         }
       )
     );
@@ -774,8 +819,7 @@ export default class I18nPlugin extends AdminForthPlugin {
         await this.cache.clear(`${this.resourceConfig.resourceId}:${category}:${lang}`);
       }
     }
-
-    return new Set(totalTranslated).size;
+    return { totalTranslated: new Set(totalTranslated).size, failedToTranslate: failedToTranslate };
   }
 
   async processExtractedMessages(adminforth: IAdminForth, filePath: string) {
@@ -1137,8 +1181,11 @@ export default class I18nPlugin extends AdminForthPlugin {
         const selectedIds = body.selectedIds;
 
         let translatedCount = 0;
+        let failedToTranslate: IFailedTranslation[] = [];
         try {
-          translatedCount = await this.bulkTranslate({ selectedIds, selectedLanguages });
+          const result = await this.bulkTranslate({ selectedIds, selectedLanguages });
+          translatedCount = result.totalTranslated;
+          failedToTranslate = result.failedToTranslate;
         } catch (e) {
           process.env.HEAVY_DEBUG && console.error('🪲⛔ bulkTranslate error', e);
           if (e instanceof AiTranslateError) {
@@ -1153,6 +1200,7 @@ export default class I18nPlugin extends AdminForthPlugin {
           successMessage: await tr(`Translated {count} items`, 'backend', {
             count: translatedCount,
           }),
+          failedToTranslate,
         };
       }
     });
