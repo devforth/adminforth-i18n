@@ -81,4 +81,11 @@ export interface PluginOptions {
    *  Default value is 30000 tokens
    */
   inputTokensPerBatch?: number;
+
+  /**
+   *  Limit of parallel translation generation requests. 
+   *  This is an optional parameter that can be used to control the number of concurrent requests sent to the completion adapter.
+   *  Default value is 20
+   */
+  parallelTranslationLimit?: number;
 }

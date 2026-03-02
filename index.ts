@@ -174,7 +174,14 @@ export default class I18nPlugin extends AdminForthPlugin {
   async modifyResourceConfig(adminforth: IAdminForth, resourceConfig: AdminForthResource) {
     super.modifyResourceConfig(adminforth, resourceConfig);
 
-    this.componentPath('JobViewComponent.vue')
+    if (!this.adminforth.config.componentsToExplicitRegister) {
+      this.adminforth.config.componentsToExplicitRegister = [];
+    }
+    this.adminforth.config.componentsToExplicitRegister.push(
+      {
+        file: this.componentPath('TranslationJobViewComponent.vue')
+      }
+    );
 
     // validate each supported language: ISO 639-1 or BCP-47 with region (e.g., en-GB)
     this.options.supportedLanguages.forEach((lang) => {
@@ -513,6 +520,8 @@ export default class I18nPlugin extends AdminForthPlugin {
     lang: string,
     failedToTranslate: IFailedTranslation[],
     needToTranslateByLang: Record<string, any> = {},
+    jobId: string,
+    promptCost: number,
   ): Promise<void>{
 
     // return [];
@@ -562,6 +571,18 @@ export default class I18nPlugin extends AdminForthPlugin {
       });
       return null;
     }
+
+    const backgroundJobsPlugin = this.adminforth.getPluginByClassName<any>('BackgroundJobsPlugin');
+
+    let totalUsedTokens = await backgroundJobsPlugin.getJobField(jobId, 'totalUsedTokens');
+    console.log(`Prompt cost for ${lang} is ${promptCost}, total used tokens before adding this prompt cost: ${totalUsedTokens}`);
+
+    totalUsedTokens += promptCost || 0;
+    console.log(`Total used tokens after adding prompt cost: ${totalUsedTokens}`);
+
+    await backgroundJobsPlugin.setJobField(jobId, 'totalUsedTokens', totalUsedTokens);
+
+
 
     try {
       res = JSON.parse(res);
@@ -732,7 +753,6 @@ export default class I18nPlugin extends AdminForthPlugin {
           stringBanch.map(s => `"${s}": ""`)
           }
         \`\`\``;
-      // await new Promise(resolve => setTimeout(resolve, 1000));
       const stringBanchCopy = [...stringBanch];
       generationTasksInitialData.push(
         { 
@@ -743,19 +763,12 @@ export default class I18nPlugin extends AdminForthPlugin {
             updateStrings,
             lang,
             failedToTranslate,
-            needToTranslateByLang
+            needToTranslateByLang,
+            promptCost: basePromptTokenLength + banchTokens,
           }
         }
       ) 
     }
-
-    // const backgroundJobsPlugin = this.adminforth.getPluginByClassName<any>('BackgroundJobsPlugin');
-    // backgroundJobsPlugin.startNewJob(
-    //   `Translate ${strings.length} items`, //job name
-    //   adminUser, // adminuser
-    //   generationTasksInitialData, //initial tasks
-    //   'translation_job_handler', //job handler name
-    // );
 
     return generationTasksInitialData;
   }
@@ -824,13 +837,18 @@ export default class I18nPlugin extends AdminForthPlugin {
     );
 
 
+    const totalTranslationTokenCost = generationTasksInitialData.reduce((a, b) => a + (b.state?.promptCost || 0), 0);
     const backgroundJobsPlugin = this.adminforth.getPluginByClassName<any>('BackgroundJobsPlugin');
-    backgroundJobsPlugin.startNewJob(
+    const jobId = await backgroundJobsPlugin.startNewJob(
       `Translate ${selectedIds.length} items`, //job name
       adminUser, // adminuser
       generationTasksInitialData, //initial tasks
       'translation_job_handler', //job handler name
     );
+
+    afLogger.info(`Started background job with ID ${jobId} `);
+    await backgroundJobsPlugin.setJobField(jobId, 'totalTranslationTokenCost', totalTranslationTokenCost);
+    await backgroundJobsPlugin.setJobField(jobId, 'totalUsedTokens', 0);
   }
 
   
@@ -895,7 +913,7 @@ export default class I18nPlugin extends AdminForthPlugin {
       // job handler name
       jobHandlerName: 'translation_job_handler',
       //handler function
-      handler: async ({ setTaskStateField, getTaskStateField }) => {
+      handler: async ({ jobId, setTaskStateField, getTaskStateField }) => {
         const initialState: {    
           prompt?: string,
           strings?: { en_string: string, category: string }[], 
@@ -904,6 +922,7 @@ export default class I18nPlugin extends AdminForthPlugin {
           lang?: string,
           failedToTranslate?: IFailedTranslation[],
           needToTranslateByLang?: Record<string, any>,
+          promptCost?: number,
         } = await getTaskStateField();
 
         if ( initialState.prompt && initialState.strings && initialState.translations && initialState.updateStrings && initialState.lang && initialState.failedToTranslate && initialState.needToTranslateByLang) {
@@ -915,13 +934,14 @@ export default class I18nPlugin extends AdminForthPlugin {
             initialState.lang,
             initialState.failedToTranslate,
             initialState.needToTranslateByLang,
+            jobId,
+            initialState.promptCost
           );
         }
-        
-        if (initialState.failedToTranslate) {
+        afLogger.debug(`Translation task for language ${initialState.lang} completed.`);
+        if (initialState.failedToTranslate.length > 0) {
           afLogger.error(`Failed to translate some strings for language ${initialState.lang} in plugin ${this.constructor.name}:, ${initialState.failedToTranslate}`);
         }
-
         const stateToSave = {
           strings: initialState.strings,
           lang: initialState.lang,
@@ -931,7 +951,14 @@ export default class I18nPlugin extends AdminForthPlugin {
         await setTaskStateField(stateToSave);
       },
       //limit of tasks, that are running in parallel
-      parallelLimit: 1
+      parallelLimit: this.options.parallelTranslationLimit || 20,
+    })
+
+    backgroundJobsPlugin.registerTaskDetailsComponent({
+      jobHandlerName: 'translation_job_handler', // Handler name
+      component: { 
+        file: this.componentPath('TranslationJobViewComponent.vue')  //custom component for the job details
+      },
     })
 
 
