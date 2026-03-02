@@ -116,10 +116,9 @@
         },
         silentError: true,
       });
-      adminforth.list.refresh();
       props.clearCheckboxes();
         if (res.ok) {
-          adminforth.alert({ message: `${res.successMessage}. ${res.failedToTranslate.length > 0 ? `${t('Failed to translate')}: ${res.failedToTranslate.length}` : ''}`, variant: 'success' });
+          adminforth.alert({ message: `Running translation job`, variant: 'success' });
         } else {
           adminforth.alert({ message: res.errorMessage || t('Failed to translate selected items. Please, try again.'), variant: 'danger' });
         }
