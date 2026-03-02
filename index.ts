@@ -575,10 +575,8 @@ export default class I18nPlugin extends AdminForthPlugin {
     const backgroundJobsPlugin = this.adminforth.getPluginByClassName<any>('BackgroundJobsPlugin');
 
     let totalUsedTokens = await backgroundJobsPlugin.getJobField(jobId, 'totalUsedTokens');
-    console.log(`Prompt cost for ${lang} is ${promptCost}, total used tokens before adding this prompt cost: ${totalUsedTokens}`);
 
-    totalUsedTokens += promptCost || 0;
-    console.log(`Total used tokens after adding prompt cost: ${totalUsedTokens}`);
+    totalUsedTokens += promptCost;
 
     await backgroundJobsPlugin.setJobField(jobId, 'totalUsedTokens', totalUsedTokens);
 
