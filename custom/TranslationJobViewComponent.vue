@@ -1,10 +1,16 @@
-<template>
-  <div class="flex flex-col w-full min-w-96">
-    <p>{{ t('Total tokens will be used for translation:') }} <span class="font-bold"> {{ props.job.state?.totalTranslationTokenCost || 0 }}</span></p>
-    <p>{{ t('Total translation token used:') }} <span class="font-bold"> {{ props.job.state?.totalUsedTokens || 0 }}</span></p>
-  </div>
-</template>
 
+<template>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
+      <div class="flex items-center space-x-1">
+        <span class=" text-gray-500">{{ t('Total tokens will be used for translation:') }}</span>
+        <span class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ new Number(props.job.state?.totalTranslationTokenCost).toLocaleString() || 0 }}</span>
+      </div>
+      <div class="flex items-center space-x-1">
+        <span class=" text-gray-500">{{ t('Total translation token used:') }}</span>
+        <span class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ new Number(props.job.state?.totalUsedTokens).toLocaleString() || 0 }}</span>
+      </div>
+    </div>
+</template>
 
 
 <script setup lang="ts">

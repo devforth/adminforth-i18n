@@ -574,12 +574,13 @@ export default class I18nPlugin extends AdminForthPlugin {
 
     const backgroundJobsPlugin = this.adminforth.getPluginByClassName<any>('BackgroundJobsPlugin');
 
-    let totalUsedTokens = await backgroundJobsPlugin.getJobField(jobId, 'totalUsedTokens');
-
-    totalUsedTokens += promptCost;
-
-    await backgroundJobsPlugin.setJobField(jobId, 'totalUsedTokens', totalUsedTokens);
-
+    backgroundJobsPlugin.updateJobFieldsAtomicly(jobId, async () => {
+      // do all set / get fields in this function to make state update atomic and there is no conflicts when 2 tasks in parallel do get before set.
+      // don't do long awaits in this callback, since it has exclusive lock.
+      let totalUsedTokens = await backgroundJobsPlugin.getJobField(jobId, 'totalUsedTokens');
+      totalUsedTokens += promptCost;
+      await backgroundJobsPlugin.setJobField(jobId, 'totalUsedTokens', totalUsedTokens);
+    })
 
 
     try {
