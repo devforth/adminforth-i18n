@@ -9,17 +9,39 @@
         <span class=" text-gray-500">{{ t('Total translation token used:') }}</span>
         <span class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ new Number(props.job.state?.totalUsedTokens).toLocaleString() || 0 }}</span>
       </div>
+    </div> 
+    <div class="grid grid-cols-3 gap-2">
+      <div class="bg-gray-50 hover:bg-gray-100 transition-all px-2 py-2 rounded-md border max-w-64 w-full flex items-center gap-2" v-for="(task, index) in translationTasks" :key="index">
+        {{  task.state?.taskName }} to
+          <span class="flag-icon"
+            :class="`flag-icon-${getCountryCodeFromLangCode(task.state?.lang)}`"
+          ></span>
+          <component 
+            :is="getCustomComponent({file: '@@/plugins/BackgroundJobsPlugin/StateToIcon.vue'})" 
+            :status="task.status"
+          />
+      </div>
     </div>
 </template>
 
 
 <script setup lang="ts">
+import { AdminForthComponentDeclarationFull } from 'adminforth';
 import { useI18n } from 'vue-i18n'
+import { onMounted, onUnmounted, ref } from 'vue';
+import websocket from '@/websocket';
+import { getCountryCodeFromLangCode } from './langCommon';
+import { getCustomComponent } from '@/utils';
+import { off } from 'process';
+
 const { t } = useI18n();
+
+const translationTasks = ref<{state: Record<string, any>, status: string}[]>([]);
 
 const props = defineProps<{
   meta: any;
-  getJobTasks: (limit?: number, offset?: number) => Promise<{state: Record<string, any>, status: string}[]>;
+  getJobTasks: (limit?: number, offset?: number) => Promise<
+  {tasks: {state: Record<string, any>, status: string}[], total: number}>;
   job: {
     id: string;
     name: string;
@@ -33,5 +55,28 @@ const props = defineProps<{
     customComponent?: AdminForthComponentDeclarationFull; 
   };
 }>();
+
+onMounted(async () => {
+  const {tasks, total} = await props.getJobTasks(20, 0);
+  translationTasks.value = tasks;
+
+  websocket.subscribe(`/background-jobs-task-update/${props.job.id}`, (data: { taskIndex: number, status?: string, state?: Record<string, any> }) => {
+    
+    if (data.state) {
+      translationTasks.value[data.taskIndex].state = data.state;
+    }
+    if (data.status) {
+      translationTasks.value[data.taskIndex].status = data.status;
+    }
+
+  });
+
+
+});
+
+onUnmounted(() => {
+  websocket.unsubscribe(`/background-jobs-task-update/${props.job.id}`);
+});
+
 
 </script>

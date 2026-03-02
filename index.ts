@@ -1,4 +1,4 @@
-import AdminForth, { AdminForthPlugin, Filters, suggestIfTypo, AdminForthDataTypes, RAMLock } from "adminforth";
+import AdminForth, { AdminForthPlugin, Filters, suggestIfTypo, AdminForthDataTypes, RAMLock, filtersTools, AdminForthFilterOperators } from "adminforth";
 import type { IAdminForth, IHttpServer, AdminForthComponentDeclaration, AdminForthResourceColumn, AdminForthResource, BeforeLoginConfirmationFunction, AdminForthConfigMenuItem, AdminUser } from "adminforth";
 import type { PluginOptions, SupportedLanguage } from './types.js';
 import iso6391 from 'iso-639-1';
@@ -481,12 +481,11 @@ export default class I18nPlugin extends AdminForthPlugin {
     if (!resourceConfig.options.pageInjections.list) {
       resourceConfig.options.pageInjections.list = {};
     }
-    if (!resourceConfig.options.pageInjections.list.beforeActionButtons) {
-      resourceConfig.options.pageInjections.list.beforeActionButtons = [];
+    if (!resourceConfig.options.pageInjections.list.threeDotsDropdownItems) {
+      resourceConfig.options.pageInjections.list.threeDotsDropdownItems = [];
     }
 
-    (resourceConfig.options.pageInjections.list.beforeActionButtons as AdminForthComponentDeclaration[]).push(pageInjection);
-
+    (resourceConfig.options.pageInjections.list.threeDotsDropdownItems as AdminForthComponentDeclaration[]).push(pageInjection);
 
     // if there is menu item with resourceId, add .badge function showing number of untranslated strings
     const addBadgeCountToMenuItem = (menuItem: AdminForthConfigMenuItem) => {
@@ -658,7 +657,7 @@ export default class I18nPlugin extends AdminForthPlugin {
 
   }
 
-  async translateToLang (
+  async getTranslateToLangTasks (
     langIsoCode: SupportedLanguage, 
     strings: { en_string: string, category: string }[], 
     plurals=false,
@@ -754,8 +753,9 @@ export default class I18nPlugin extends AdminForthPlugin {
         \`\`\``;
       const stringBanchCopy = [...stringBanch];
       generationTasksInitialData.push(
-        { 
+        {
           state: {
+            taskName: `Translate ${strings.length} strings`,
             prompt: promptToGenerate,
             strings: strings.filter(s => stringBanchCopy.includes(s.en_string)),
             translations: translations.filter(t => stringBanchCopy.includes(t.en_string)),
@@ -826,10 +826,10 @@ export default class I18nPlugin extends AdminForthPlugin {
         async ([lang, strings]: [SupportedLanguage, { en_string: string, category: string }[]]) => {
           // first translate without plurals
           const stringsWithoutPlurals = strings.filter(s => !s.en_string.includes('|'));
-          const noPluralTranslationsTasks = await this.translateToLang(lang, stringsWithoutPlurals, false, translations, updateStrings, needToTranslateByLang, adminUser);
+          const noPluralTranslationsTasks = await this.getTranslateToLangTasks(lang, stringsWithoutPlurals, false, translations, updateStrings, needToTranslateByLang, adminUser);
 
           const stringsWithPlurals = strings.filter(s => s.en_string.includes('|'));
-          const pluralTranslationsTasks = await this.translateToLang(lang, stringsWithPlurals, true, translations, updateStrings, needToTranslateByLang, adminUser);
+          const pluralTranslationsTasks = await this.getTranslateToLangTasks(lang, stringsWithPlurals, true, translations, updateStrings, needToTranslateByLang, adminUser);
           generationTasksInitialData = generationTasksInitialData.concat(noPluralTranslationsTasks || []).concat(pluralTranslationsTasks || []);
         }
       )
@@ -914,6 +914,7 @@ export default class I18nPlugin extends AdminForthPlugin {
       //handler function
       handler: async ({ jobId, setTaskStateField, getTaskStateField }) => {
         const initialState: {    
+          taskName: string,
           prompt?: string,
           strings?: { en_string: string, category: string }[], 
           translations?: any[],
@@ -938,16 +939,19 @@ export default class I18nPlugin extends AdminForthPlugin {
           );
         }
         afLogger.debug(`Translation task for language ${initialState.lang} completed.`);
-        if (initialState.failedToTranslate.length > 0) {
-          afLogger.error(`Failed to translate some strings for language ${initialState.lang} in plugin ${this.constructor.name}:, ${initialState.failedToTranslate}`);
-        }
+
         const stateToSave = {
-          strings: initialState.strings,
+          taskName: initialState.taskName,
           lang: initialState.lang,
           failedToTranslate: initialState.failedToTranslate,
         }
-
         await setTaskStateField(stateToSave);
+
+        this.adminforth.websocket.publish('/translation_progress', {});
+        if (initialState.failedToTranslate.length > 0) {
+          afLogger.error(`Failed to translate some strings for language ${initialState.lang} in plugin ${this.constructor.name}:, ${initialState.failedToTranslate}`);
+          throw new Error(`Failed to translate some strings for language ${initialState.lang}, check job details for more info`);
+        }
       },
       //limit of tasks, that are running in parallel
       parallelLimit: this.options.parallelTranslationLimit || 20,
@@ -1273,6 +1277,68 @@ export default class I18nPlugin extends AdminForthPlugin {
         return { 
           ok: true, 
         };
+      }
+    });
+
+    server.endpoint({
+      method: 'POST',
+      path: `/plugin/${this.pluginInstanceId}/get_filtered_ids`,
+      handler: async ({ body, adminUser, headers, query, cookies, requestUrl }) => {
+        const resource = this.resourceConfig;
+
+        for (const hook of resource.hooks?.list?.beforeDatasourceRequest || []) {
+          const filterTools = filtersTools.get(body);
+          body.filtersTools = filterTools;
+          const resp = await hook({
+            resource,
+            query: body,
+            adminUser,
+            //@ts-ignore
+            filtersTools: filterTools, 
+            extra: {
+              body, query, headers, cookies, requestUrl
+            },
+            adminforth: this.adminforth,
+          });
+          if (!resp || (!resp.ok && !resp.error)) {
+            throw new Error(`Hook must return object with {ok: true} or { error: 'Error' } `);
+          }
+          if (resp.error) {
+            return { error: resp.error };
+          }
+        }
+        const filters = body.filters;
+
+        const normalizedFilters = { operator: AdminForthFilterOperators.AND, subFilters: [] };
+        if (filters) {
+          if (typeof filters !== 'object') {
+            throw new Error(`Filter should be an array or an object`);
+          }
+          if (Array.isArray(filters)) {
+            // if filters are an array, they will be connected with "AND" operator by default
+            normalizedFilters.subFilters = filters;
+          } else if (filters.field) {
+            // assume filter is a SingleFilter
+            normalizedFilters.subFilters = [filters];
+          } else if (filters.subFilters) {
+            // assume filter is a AndOr filter
+            normalizedFilters.operator = filters.operator;
+            normalizedFilters.subFilters = filters.subFilters;
+          } else {
+            // wrong filter
+            throw new Error(`Wrong filter object value: ${JSON.stringify(filters)}`);
+          }
+        }
+
+        const records = await this.adminforth.resource(this.resourceConfig.resourceId).list(normalizedFilters);
+        if (!records) {
+          return { ok: true, recordIds: [] };
+        }
+        const primaryKeyColumn = this.resourceConfig.columns.find((col) => col.primaryKey);
+
+        const recordIds = records.map(record => record[primaryKeyColumn.name]);
+
+        return { ok: true, recordIds }
       }
     });
 
