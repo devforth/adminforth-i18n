@@ -787,7 +787,7 @@ export default class I18nPlugin extends AdminForthPlugin {
       selectedIds: string[], 
       selectedLanguages?: SupportedLanguage[],
       adminUser: AdminUser,
-    }): Promise<void>
+    }): Promise<string>
     {
     const needToTranslateByLang : Partial<
       Record<
@@ -856,6 +856,8 @@ export default class I18nPlugin extends AdminForthPlugin {
     afLogger.info(`Started background job with ID ${jobId} `);
     await backgroundJobsPlugin.setJobField(jobId, 'totalTranslationTokenCost', totalTranslationTokenCost);
     await backgroundJobsPlugin.setJobField(jobId, 'totalUsedTokens', 0);
+
+    return jobId
   }
 
   
@@ -1280,10 +1282,11 @@ export default class I18nPlugin extends AdminForthPlugin {
         const selectedLanguages = body.selectedLanguages;
         const selectedIds = body.selectedIds;
         
-        this.bulkTranslate({ selectedIds, selectedLanguages, adminUser });
+        const jobId = await this.bulkTranslate({ selectedIds, selectedLanguages, adminUser });
 
         return { 
           ok: true, 
+          jobId: jobId,
         };
       }
     });

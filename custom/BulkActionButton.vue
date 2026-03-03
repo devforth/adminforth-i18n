@@ -4,7 +4,7 @@
     :buttons="[
       { 
         label: 'Translate', 
-        onclick: (dialog) => { runTranslation(); dialog.hide(); } ,
+        onclick: async (dialog) => { await runTranslation(); dialog.hide(); } ,
         options: {
           disabled: noneChecked 
         }
@@ -31,6 +31,9 @@
     </template>
 
     <div class="af-i18n-translations-selector grid grid-cols-2 gap-1 w-full">
+      <div v-if="isLoading" class="top-0 left-0 z-10 absolute bg-black/30 w-full h-full rounded-lg flex items-center justify-center">
+        <Spinner class="w-10 h-10" />
+      </div>
       <Button @click="selectAll" :disabled="allChecked">{{ t('Select All') }}</Button>
       <Button @click="uncheckAll" :disabled="noneChecked">{{ t('Uncheck All') }}</Button>
       <div class="col-span-2 grid grid-cols-3 gap-1 mt-4">
@@ -50,7 +53,7 @@
 <script setup lang="ts">
   import { IconLanguageOutline } from '@iconify-prerendered/vue-flowbite';
   import { useI18n } from 'vue-i18n';
-  import { Dialog, Button, Checkbox } from '@/afcl';
+  import { Dialog, Button, Checkbox, Spinner } from '@/afcl';
   import { computed, onMounted, ref, onUnmounted } from 'vue';
   import { callAdminForthApi } from '@/utils';
   import { useAdminforth } from '@/adminforth';
@@ -82,6 +85,7 @@
   }>();
 
   const checkedLanguages = ref<Record<string, boolean>>({});
+  const isLoading = ref(false);
   const allChecked = computed(() => Object.values(checkedLanguages.value).every(Boolean));
   const noneChecked = computed(() => Object.values(checkedLanguages.value).every(value => !value));
 
@@ -115,6 +119,7 @@
   }
 
   async function runTranslation() {
+    isLoading.value = true;
     const listOfIds = await getListOfIds();
     try {
       const res = await callAdminForthApi({
@@ -129,6 +134,13 @@
       props.clearCheckboxes();
         if (res.ok) {
           adminforth.alert({ message: `Running translation job`, variant: 'success' });
+          console.log('Received record IDs for filtered selector:', res);
+          const jobId = res.jobId;
+          if (jobId) {
+            console.log('Opening job info popup for jobId:', jobId);
+            //@ts-ignore
+            window.OpenJobInfoPopup(jobId);
+          }
         } else {
           adminforth.alert({ message: res.errorMessage || t('Failed to translate selected items. Please, try again.'), variant: 'danger' });
         }
@@ -136,6 +148,7 @@
       console.error('Failed to translate selected items:', e);
       adminforth.alert({ message: t('Failed to translate selected items. Please, try again.'), variant: 'danger' });
     }
+    isLoading.value = false;
   }
 
   async function getListOfIds() {
