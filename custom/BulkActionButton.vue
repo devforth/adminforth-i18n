@@ -4,7 +4,7 @@
     :buttons="[
       { 
         label: 'Translate', 
-        onclick: (dialog) => { runTranslation(); dialog.hide(); } ,
+        onclick: async (dialog) => { await runTranslation(); dialog.hide(); } ,
         options: {
           disabled: noneChecked 
         }
@@ -19,20 +19,21 @@
     ]"
   >
     <template #trigger>
-      <button
-        v-if="checkboxes.length > 0"
-        class="flex gap-1 items-center py-1 px-3 text-sm font-medium text-lightListViewButtonText focus:outline-none bg-lightListViewButtonBackground rounded-default border border-lightListViewButtonBorder hover:bg-lightListViewButtonBackgroundHover hover:text-lightListViewButtonTextHover focus:z-10 focus:ring-4 focus:ring-lightListViewButtonFocusRing dark:focus:ring-darkListViewButtonFocusRing dark:bg-darkListViewButtonBackground dark:text-darkListViewButtonText dark:border-darkListViewButtonBorder dark:hover:text-darkListViewButtonTextHover dark:hover:bg-darkListViewButtonBackgroundHover"
-      >
-        <IconLanguageOutline class="w-5 h-5" />
-        {{ t('Translate Selected') }} {{ `(${checkboxes.length})`  }}
-        <div class="text-white bg-gradient-to-r from-purple-500 via-purple-600 to-purple-700 hover:bg-gradient-to-br focus:ring-4 focus:outline-none focus:ring-purple-300 dark:focus:ring-purple-800 
-          font-medium rounded-sm text-xs px-1 ml-1 text-center ">
-          AI    
+      <button class="flex items-center justify-center w-full">
+        <IconLanguageOutline class="text-gray-500 dark:text-gray-400 w-5 h-5" />
+        <div class="flex items-end justify-start gap-2 cursor-pointer">
+          <p class="text-justify max-h-[18px] truncate max-w-[60vw] md:max-w-none">{{ t('Translate filtered') }}</p>
+            <div class="flex items-center justify-center text-white bg-gradient-to-r h-[18px] from-purple-500 via-purple-600 to-purple-700 hover:bg-gradient-to-br focus:ring-4 focus:outline-none focus:ring-purple-300 dark:focus:ring-purple-800 font-medium rounded-md text-sm px-1 text-center">
+            {{t('AI')}}
+          </div>
         </div>
       </button>
     </template>
 
     <div class="af-i18n-translations-selector grid grid-cols-2 gap-1 w-full">
+      <div v-if="isLoading" class="top-0 left-0 z-10 absolute bg-black/30 w-full h-full rounded-lg flex items-center justify-center">
+        <Spinner class="w-10 h-10" />
+      </div>
       <Button @click="selectAll" :disabled="allChecked">{{ t('Select All') }}</Button>
       <Button @click="uncheckAll" :disabled="noneChecked">{{ t('Uncheck All') }}</Button>
       <div class="col-span-2 grid grid-cols-3 gap-1 mt-4">
@@ -52,14 +53,18 @@
 <script setup lang="ts">
   import { IconLanguageOutline } from '@iconify-prerendered/vue-flowbite';
   import { useI18n } from 'vue-i18n';
-  import { Dialog, Button, Checkbox } from '@/afcl';
-  import { computed, onMounted, ref, watch } from 'vue';
+  import { Dialog, Button, Checkbox, Spinner } from '@/afcl';
+  import { computed, onMounted, ref, onUnmounted } from 'vue';
   import { callAdminForthApi } from '@/utils';
   import { useAdminforth } from '@/adminforth';
   import { getCountryCodeFromLangCode } from './langCommon';
   import { getName, overwrite } from 'country-list';
   import ISO6391 from 'iso-639-1';
   import 'flag-icon-css/css/flag-icons.min.css';
+  import websocket from '@/websocket';
+  import { useFiltersStore } from '@/stores/filters';
+
+  const filtersStore = useFiltersStore();
 
   const { t } = useI18n();
   const adminforth = useAdminforth();
@@ -80,14 +85,22 @@
   }>();
 
   const checkedLanguages = ref<Record<string, boolean>>({});
+  const isLoading = ref(false);
   const allChecked = computed(() => Object.values(checkedLanguages.value).every(Boolean));
   const noneChecked = computed(() => Object.values(checkedLanguages.value).every(value => !value));
 
   onMounted(() => {
+    websocket.subscribe('/translation_progress', (data) => {
+      adminforth.list.refresh();
+    });
     for (const lang of props.meta.supportedLanguages) {
       checkedLanguages.value[lang] = true;
     }
   });
+  
+  onUnmounted( () => {
+      websocket.unsubscribe('/translation_progress');
+  } )
 
   function selectAll() {
     for (const lang of props.meta.supportedLanguages) {
@@ -106,20 +119,28 @@
   }
 
   async function runTranslation() {
+    isLoading.value = true;
+    const listOfIds = await getListOfIds();
     try {
       const res = await callAdminForthApi({
         path: `/plugin/${props.meta.pluginInstanceId}/translate-selected-to-languages`,
         method: 'POST',
         body: { 
-          selectedIds: props.checkboxes,
+          selectedIds: listOfIds,
           selectedLanguages: Object.keys(checkedLanguages.value).filter(lang => checkedLanguages.value[lang]),
         },
         silentError: true,
       });
-      adminforth.list.refresh();
       props.clearCheckboxes();
         if (res.ok) {
-          adminforth.alert({ message: res.successMessage, variant: 'success' });
+          adminforth.alert({ message: `Running translation job`, variant: 'success' });
+          console.log('Received record IDs for filtered selector:', res);
+          const jobId = res.jobId;
+          if (jobId) {
+            console.log('Opening job info popup for jobId:', jobId);
+            //@ts-ignore
+            window.OpenJobInfoPopup(jobId);
+          }
         } else {
           adminforth.alert({ message: res.errorMessage || t('Failed to translate selected items. Please, try again.'), variant: 'danger' });
         }
@@ -127,6 +148,29 @@
       console.error('Failed to translate selected items:', e);
       adminforth.alert({ message: t('Failed to translate selected items. Please, try again.'), variant: 'danger' });
     }
+    isLoading.value = false;
   }
+
+  async function getListOfIds() {
+    const filters = filtersStore.getFilters();
+    let res;
+    try {
+      res = await callAdminForthApi({
+        path: `/plugin/${props.meta.pluginInstanceId}/get_filtered_ids`,
+        method: 'POST',
+        body: { filters },
+        silentError: true,
+      });
+    } catch (e) {
+      console.error('Failed to get records for filtered selector:', e);
+      return [];
+    }
+    if (!res?.ok || !res?.recordIds) {
+      console.error('Failed to get records for filtered selector, response error:', res);
+      return [];
+    }
+    return res.recordIds;
+  }
+ 
 
 </script>

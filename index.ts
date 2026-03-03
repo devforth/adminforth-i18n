@@ -1,5 +1,5 @@
-import AdminForth, { AdminForthPlugin, Filters, suggestIfTypo, AdminForthDataTypes, RAMLock } from "adminforth";
-import type { IAdminForth, IHttpServer, AdminForthComponentDeclaration, AdminForthResourceColumn, AdminForthResource, BeforeLoginConfirmationFunction, AdminForthConfigMenuItem } from "adminforth";
+import AdminForth, { AdminForthPlugin, Filters, suggestIfTypo, AdminForthDataTypes, RAMLock, filtersTools, AdminForthFilterOperators } from "adminforth";
+import type { IAdminForth, IHttpServer, AdminForthComponentDeclaration, AdminForthResourceColumn, AdminForthResource, BeforeLoginConfirmationFunction, AdminForthConfigMenuItem, AdminUser } from "adminforth";
 import type { PluginOptions, SupportedLanguage } from './types.js';
 import iso6391 from 'iso-639-1';
 import { iso31661Alpha2ToAlpha3 } from 'iso-3166';
@@ -9,6 +9,9 @@ import chokidar from 'chokidar';
 import  { AsyncQueue } from '@sapphire/async-queue';
 import getFlagEmoji from 'country-flag-svg';
 import { parse } from 'bcp-47';
+import pLimit from 'p-limit';
+import { randomUUID } from 'crypto';
+import { afLogger } from "adminforth";
 
 const processFrontendMessagesQueue = new AsyncQueue();
 
@@ -66,6 +69,12 @@ function isValidSupportedLanguageTag(langCode: SupportedLanguage): boolean {
   } catch (e) {
     return false;
   }
+}
+
+interface IFailedTranslation {
+  lang: SupportedLanguage;
+  en_string: string;
+  failedReason: string;
 }
 
 
@@ -164,6 +173,15 @@ export default class I18nPlugin extends AdminForthPlugin {
 
   async modifyResourceConfig(adminforth: IAdminForth, resourceConfig: AdminForthResource) {
     super.modifyResourceConfig(adminforth, resourceConfig);
+
+    if (!this.adminforth.config.componentsToExplicitRegister) {
+      this.adminforth.config.componentsToExplicitRegister = [];
+    }
+    this.adminforth.config.componentsToExplicitRegister.push(
+      {
+        file: this.componentPath('TranslationJobViewComponent.vue')
+      }
+    );
 
     // validate each supported language: ISO 639-1 or BCP-47 with region (e.g., en-GB)
     this.options.supportedLanguages.forEach((lang) => {
@@ -463,12 +481,11 @@ export default class I18nPlugin extends AdminForthPlugin {
     if (!resourceConfig.options.pageInjections.list) {
       resourceConfig.options.pageInjections.list = {};
     }
-    if (!resourceConfig.options.pageInjections.list.beforeActionButtons) {
-      resourceConfig.options.pageInjections.list.beforeActionButtons = [];
+    if (!resourceConfig.options.pageInjections.list.threeDotsDropdownItems) {
+      resourceConfig.options.pageInjections.list.threeDotsDropdownItems = [];
     }
 
-    (resourceConfig.options.pageInjections.list.beforeActionButtons as AdminForthComponentDeclaration[]).push(pageInjection);
-
+    (resourceConfig.options.pageInjections.list.threeDotsDropdownItems as AdminForthComponentDeclaration[]).push(pageInjection);
 
     // if there is menu item with resourceId, add .badge function showing number of untranslated strings
     const addBadgeCountToMenuItem = (menuItem: AdminForthConfigMenuItem) => {
@@ -494,51 +511,19 @@ export default class I18nPlugin extends AdminForthPlugin {
     });
   }
 
-  async translateToLang (
-      langIsoCode: SupportedLanguage, 
-      strings: { en_string: string, category: string }[], 
-      plurals=false,
-      translations: any[],
-      updateStrings: Record<string, { updates: any, category: string, strId: string, enStr: string, translatedStr: string }> = {}
-  ): Promise<string[]> {
-    const maxKeysInOneReq = 10;
-    if (strings.length === 0) {
-      return [];
-    }
+  async generateAndSaveBunch (
+    prompt: string,
+    strings: { en_string: string, category: string }[], 
+    translations: any[],
+    updateStrings: Record<string, { updates: any, category: string, strId: string, enStr: string, translatedStr: string }> = {},
+    lang: string,
+    failedToTranslate: IFailedTranslation[],
+    needToTranslateByLang: Record<string, any> = {},
+    jobId: string,
+    promptCost: number,
+  ): Promise<void>{
 
-    const replacedLanguageCodeForTranslations = this.options.translateLangAsBCP47Code && langIsoCode.length === 2 ? this.options.translateLangAsBCP47Code[langIsoCode as any] : null;
-    if (strings.length > maxKeysInOneReq) {
-      let totalTranslated = [];
-      for (let i = 0; i < strings.length; i += maxKeysInOneReq) {
-        const slicedStrings = strings.slice(i, i + maxKeysInOneReq);
-        process.env.HEAVY_DEBUG && console.log('🪲🔪slicedStrings len', slicedStrings.length);
-        const madeKeys = await this.translateToLang(langIsoCode, slicedStrings, plurals, translations, updateStrings);
-        totalTranslated = totalTranslated.concat(madeKeys);
-      }
-      return totalTranslated;
-    }
-    const langCode = replacedLanguageCodeForTranslations ? replacedLanguageCodeForTranslations : langIsoCode;
-    const lang = langIsoCode;
-    const primaryLang = getPrimaryLanguageCode(lang);
-    const langName = iso6391.getName(primaryLang);
-    const requestSlavicPlurals = Object.keys(SLAVIC_PLURAL_EXAMPLES).includes(primaryLang) && plurals;
-    const region = String(lang).split('-')[1]?.toUpperCase() || '';
-    const prompt = `
-        I need to translate strings in JSON to ${langName} language ${replacedLanguageCodeForTranslations || lang.length > 2 ? `BCP-47 code ${langCode}` : `ISO 639-1 code ${langIsoCode}`} from English for my web app.
-        ${region ? `Use the regional conventions for ${langCode} (region ${region}), including spelling, punctuation, and formatting.` : ''}
-        ${requestSlavicPlurals ? `You should provide 4 slavic forms (in format "zero count | singular count | 2-4 | 5+") e.g. "apple | apples" should become "${SLAVIC_PLURAL_EXAMPLES[lang]}"` : ''}
-        Keep keys, as is, write translation into values! If keys have variables (in curly brackets), then translated strings should have them as well (variables itself should not be translated). Here are the strings:
-
-        \`\`\`json
-        ${
-        JSON.stringify(strings.reduce((acc: object, s: { en_string: string }): object => {
-          acc[s.en_string] = '';
-          return acc;
-        }, {}), null, 2)
-        }
-    \`\`\`
-    `;  
-
+    // return [];
     const jsonSchemaProperties = {};
     strings.forEach(s => {
       jsonSchemaProperties[s.en_string] = { 
@@ -548,7 +533,7 @@ export default class I18nPlugin extends AdminForthPlugin {
     });
 
     const jsonSchemaRequired = strings.map(s => s.en_string);
-
+    const dedupRequired = Array.from(new Set(jsonSchemaRequired));
     // call OpenAI
     const resp = await this.options.completeAdapter.complete(
       prompt,
@@ -560,36 +545,56 @@ export default class I18nPlugin extends AdminForthPlugin {
           schema: {
             type: "object",
             properties: jsonSchemaProperties,
-            required: jsonSchemaRequired,
+            required: dedupRequired,
           },
         },
       }
     );
-
+    
     process.env.HEAVY_DEBUG && console.log(`🪲🔪LLM resp >> ${prompt.length}, <<${resp.content.length} :\n\n`, JSON.stringify(resp));
     
     if (resp.error) {
       throw new AiTranslateError(resp.error);
     }
 
-    // parse response like
-    // Here are the translations for the strings you provided:
-    // ```json
-    // [{"live": "canlı"}, {"Table Games": "Masa Oyunları"}]
-    // ```
     let res;
     try {
-      res = resp.content//.split("```json")[1].split("```")[0];
+      res = resp.content;
     } catch (e) {
       console.error(`Error in parsing LLM resp: ${resp}\n Prompt was: ${prompt}\n Resp was: ${JSON.stringify(resp)}`, );
-      return [];
+      strings.forEach(s => {
+        failedToTranslate.push({
+          lang: lang as SupportedLanguage,
+          en_string: s.en_string,
+          failedReason: "Error in parsing LLM response"
+        });
+      });
+      return null;
     }
+
+    const backgroundJobsPlugin = this.adminforth.getPluginByClassName<any>('BackgroundJobsPlugin');
+
+    backgroundJobsPlugin.updateJobFieldsAtomicly(jobId, async () => {
+      // do all set / get fields in this function to make state update atomic and there is no conflicts when 2 tasks in parallel do get before set.
+      // don't do long awaits in this callback, since it has exclusive lock.
+      let totalUsedTokens = await backgroundJobsPlugin.getJobField(jobId, 'totalUsedTokens');
+      totalUsedTokens += promptCost;
+      await backgroundJobsPlugin.setJobField(jobId, 'totalUsedTokens', totalUsedTokens);
+    })
+
 
     try {
       res = JSON.parse(res);
     } catch (e) {
       console.error(`Error in parsing LLM resp json: ${resp}\n Prompt was: ${prompt}\n Resp was: ${JSON.stringify(resp)}`, );
-      return [];
+      strings.forEach(s => {
+        failedToTranslate.push({
+          lang: lang as SupportedLanguage,
+          en_string: s.en_string,
+          failedReason: "Error in parsing LLM response JSON"
+        });
+      });
+      return null;
     }
 
 
@@ -598,7 +603,6 @@ export default class I18nPlugin extends AdminForthPlugin {
       // might be several with same en_string
       for (const translation of translationsTargeted) {
         //translation[this.trFieldNames[lang]] = translatedStr;
-        // process.env.HEAVY_DEBUG && console.log(`🪲translated to ${lang} ${translation.en_string}, ${translatedStr}`)
         if (!updateStrings[translation[this.primaryKeyFieldName]]) {
 
           updateStrings[translation[this.primaryKeyFieldName]] = {
@@ -620,16 +624,181 @@ export default class I18nPlugin extends AdminForthPlugin {
       }
     }
 
-    return Object.keys(updateStrings);
+    const langsInvolved = new Set(Object.keys(needToTranslateByLang));
+
+    // here we need to save updateStrings
+    await Promise.all(
+      Object.entries(updateStrings).map(
+        async ([_, { updates, strId }]: [string, { updates: any, category: string, strId: string }]) => {
+          // get old full record
+          const oldRecord = await this.adminforth.resource(this.resourceConfig.resourceId).get([Filters.EQ(this.primaryKeyFieldName, strId)]);
+
+          // because this will translate all languages, we can set completedLangs to all languages
+          const futureCompletedFieldValue = await this.computeCompletedFieldValue({ ...oldRecord, ...updates });
+
+          await this.adminforth.resource(this.resourceConfig.resourceId).update(strId, {
+            ...updates,
+            [this.options.completedFieldName]: futureCompletedFieldValue,
+          });
+        }
+      )
+    );
+    
+
+    for (const lang of langsInvolved) {
+      const categoriesInvolved = new Set();
+      for (const { enStr, category } of Object.values(updateStrings)) {
+        categoriesInvolved.add(category);
+        await this.cache.clear(`${this.resourceConfig.resourceId}:${category}:${lang}:${enStr}`);
+      }
+      for (const category of categoriesInvolved) {
+        await this.cache.clear(`${this.resourceConfig.resourceId}:${category}:${lang}`);
+      }
+    }
+
   }
 
-  // returns translated count
-  async bulkTranslate({ selectedIds, selectedLanguages }: { selectedIds: string[], selectedLanguages?: SupportedLanguage[] }): Promise<number> {
+  async getTranslateToLangTasks (
+    langIsoCode: SupportedLanguage, 
+    strings: { id: string, en_string: string, category: string }[], 
+    plurals=false,
+    translations: any[],
+    updateStrings: Record<string, { updates: any, category: string, strId: string, enStr: string, translatedStr: string }> = {},
+    needToTranslateByLang: Record<string, any> = {},
+    adminUser: AdminUser,
+  ): Promise<any> {
 
+    const maxInputTokens = this.options.inputTokensPerBatch ?? 30000;
+
+    const limit = pLimit(30); 
+    const enStringsTokenLengthCache: Record<string, any> = {};
+    
+
+    const tokenLengthPerString = async ({ str, id }: { str: string; id: string }): Promise<void> => {
+      const objectToPush = {
+        en_string: str,
+        numOfTokens: await this.options.completeAdapter.measureTokensCount(`"${str}":"", \n`)
+      };
+      enStringsTokenLengthCache[id] = objectToPush;
+    }
+    const promises = strings.map(s => limit(() => tokenLengthPerString({ str: s.en_string, id: s.id })));
+
+    await Promise.all(promises);
+    if (strings.length === 0) {
+      return;
+    }
+
+    const replacedLanguageCodeForTranslations = this.options.translateLangAsBCP47Code && langIsoCode.length === 2 ? this.options.translateLangAsBCP47Code[langIsoCode as any] : null;
+    const langSchema = parse(String(langIsoCode), 
+      { 
+        normalize: true, 
+      }
+    );
+    const langCode = replacedLanguageCodeForTranslations ? replacedLanguageCodeForTranslations : langIsoCode;
+    const lang = langIsoCode;
+    const primaryLang = getPrimaryLanguageCode(lang);
+    const langName = iso6391.getName(primaryLang);
+    const requestSlavicPlurals = Object.keys(SLAVIC_PLURAL_EXAMPLES).includes(primaryLang) && plurals;
+    const region = langSchema.region;
+    const basePrompt = `
+      I need to translate strings in JSON to ${langName} language ${replacedLanguageCodeForTranslations || lang.length > 2 ? `BCP-47 code ${langCode}` : `ISO 639-1 code ${langIsoCode}`} from English for my web app.
+
+      
+      ${region ? `Use the regional conventions for ${langCode} (region ${region}), including spelling, punctuation, and formatting.` : ''}
+      ${requestSlavicPlurals ? `You should provide 4 slavic forms (in format "zero count | singular count | 2-4 | 5+") e.g. "apple | apples" should become "${SLAVIC_PLURAL_EXAMPLES[lang]}"` : ''}
+      Keep keys, as is, write translation into values! If keys have variables (in curly brackets), then translated strings should have them as well (variables itself should not be translated). Here are the strings:
+      \`\`\`json
+      {
+
+      }
+      \`\`\`
+    `;
+
+    const failedToTranslate: IFailedTranslation[] = [];
+    const basePromptTokenLength = await this.options.completeAdapter.measureTokensCount(basePrompt);
+    const allowedTokensAmountForFields = maxInputTokens - basePromptTokenLength;
+    const stringsToTranslate: Record<string, { id: string; en_string: string; category: string }> = Object.fromEntries(strings.map(s => [s.id, s]));
+    const generationTasksInitialData = []
+    while (Object.keys(stringsToTranslate).length !== 0) {
+      const stringBanch = [];
+      const stringIdsInBatch = [];
+      let banchTokens = 0;
+      for (const id of Object.keys(stringsToTranslate)) {
+        const { en_string } = stringsToTranslate[id];
+        const numberOfTokensForString = enStringsTokenLengthCache[id]?.numOfTokens || 0;
+        if( banchTokens + numberOfTokensForString <= allowedTokensAmountForFields ) {
+          stringBanch.push( en_string );
+          stringIdsInBatch.push(id);
+          banchTokens += numberOfTokensForString;
+        } else {
+          continue;
+        }
+      }
+      if ( stringBanch.length === 0 ) {
+        Object.values(stringsToTranslate).forEach(s => {
+          failedToTranslate.push({
+            lang,
+            en_string: s.en_string,
+            failedReason: "Not enough input generation tokens"
+          });
+          generationTasksInitialData.push(
+            { 
+              state: {
+                failedToTranslate,
+              }
+            }
+          )
+        });
+        break;
+      }
+
+      for ( const id of stringIdsInBatch) {
+        delete stringsToTranslate[id];
+      }
+
+      const promptToGenerate = basePrompt.split(`\`\`\`json`)[0] + 
+        `\`\`\`json
+        {
+          ${
+            stringBanch.map(s => `"${s}": ""`).join(",\n")
+          }
+        }
+        \`\`\``;
+      const stringBanchCopy = [...stringBanch];
+      generationTasksInitialData.push(
+        {
+          state: {
+            taskName: `Translate ${strings.length} strings`,
+            prompt: promptToGenerate,
+            strings: strings.filter(s => stringBanchCopy.includes(s.en_string)),
+            translations: translations.filter(t => stringBanchCopy.includes(t.en_string)),
+            updateStrings,
+            lang,
+            failedToTranslate,
+            needToTranslateByLang,
+            promptCost: basePromptTokenLength + banchTokens,
+          }
+        }
+      ) 
+    }
+
+    return generationTasksInitialData;
+  }
+
+
+  // returns translated count
+  async bulkTranslate({ selectedIds, selectedLanguages, adminUser }: 
+    { 
+      selectedIds: string[], 
+      selectedLanguages?: SupportedLanguage[],
+      adminUser: AdminUser,
+    }): Promise<string>
+    {
     const needToTranslateByLang : Partial<
       Record<
         SupportedLanguage,
         {
+          id: string;
           en_string: string;
           category: string;
         }[]
@@ -649,6 +818,7 @@ export default class I18nPlugin extends AdminForthPlugin {
             needToTranslateByLang[lang] = [];
           }
           needToTranslateByLang[lang].push({
+            id: translation[this.primaryKeyFieldName],
             'en_string': translation[this.enFieldName],
             category: translation[this.options.categoryFieldName],
           })
@@ -665,58 +835,39 @@ export default class I18nPlugin extends AdminForthPlugin {
     }> = {};
 
 
-    const langsInvolved = new Set(Object.keys(needToTranslateByLang));
-
-    let totalTranslated = [];
-
+    let generationTasksInitialData = [];
     await Promise.all(
       Object.entries(needToTranslateByLang).map(
-        async ([lang, strings]: [SupportedLanguage, { en_string: string, category: string }[]]) => {
+        async ([lang, strings]: [SupportedLanguage, { id: string, en_string: string, category: string }[]]) => {
           // first translate without plurals
           const stringsWithoutPlurals = strings.filter(s => !s.en_string.includes('|'));
-          const noPluralKeys = await this.translateToLang(lang, stringsWithoutPlurals, false, translations, updateStrings);
-
+          const noPluralTranslationsTasks = await this.getTranslateToLangTasks(lang, stringsWithoutPlurals, false, translations, updateStrings, needToTranslateByLang, adminUser);
 
           const stringsWithPlurals = strings.filter(s => s.en_string.includes('|'));
-
-          const pluralKeys = await this.translateToLang(lang, stringsWithPlurals, true, translations, updateStrings);
-
-          totalTranslated = totalTranslated.concat(noPluralKeys, pluralKeys);
+          const pluralTranslationsTasks = await this.getTranslateToLangTasks(lang, stringsWithPlurals, true, translations, updateStrings, needToTranslateByLang, adminUser);
+          generationTasksInitialData = generationTasksInitialData.concat(noPluralTranslationsTasks || []).concat(pluralTranslationsTasks || []);
         }
       )
     );
 
-    await Promise.all(
-      Object.entries(updateStrings).map(
-        async ([_, { updates, strId }]: [string, { updates: any, category: string, strId: string }]) => {
-          // get old full record
-          const oldRecord = await this.adminforth.resource(this.resourceConfig.resourceId).get([Filters.EQ(this.primaryKeyFieldName, strId)]);
 
-          // because this will translate all languages, we can set completedLangs to all languages
-          const futureCompletedFieldValue = await this.computeCompletedFieldValue({ ...oldRecord, ...updates });
-
-          await this.adminforth.resource(this.resourceConfig.resourceId).update(strId, {
-            ...updates,
-            [this.options.completedFieldName]: futureCompletedFieldValue,
-          });
-        }
-      )
+    const totalTranslationTokenCost = generationTasksInitialData.reduce((a, b) => a + (b.state?.promptCost || 0), 0);
+    const backgroundJobsPlugin = this.adminforth.getPluginByClassName<any>('BackgroundJobsPlugin');
+    const jobId = await backgroundJobsPlugin.startNewJob(
+      `Translate ${selectedIds.length} items`, //job name
+      adminUser, // adminuser
+      generationTasksInitialData, //initial tasks
+      'translation_job_handler', //job handler name
     );
 
-    for (const lang of langsInvolved) {
-      const categoriesInvolved = new Set();
-      for (const { enStr, category } of Object.values(updateStrings)) {
-        categoriesInvolved.add(category);
-        await this.cache.clear(`${this.resourceConfig.resourceId}:${category}:${lang}:${enStr}`);
-      }
-      for (const category of categoriesInvolved) {
-        await this.cache.clear(`${this.resourceConfig.resourceId}:${category}:${lang}`);
-      }
-    }
+    afLogger.info(`Started background job with ID ${jobId} `);
+    await backgroundJobsPlugin.setJobField(jobId, 'totalTranslationTokenCost', totalTranslationTokenCost);
+    await backgroundJobsPlugin.setJobField(jobId, 'totalUsedTokens', 0);
 
-    return new Set(totalTranslated).size;
+    return jobId
   }
 
+  
   async processExtractedMessages(adminforth: IAdminForth, filePath: string) {
     await processFrontendMessagesQueue.wait();
     // messages file is in i18n-messages.json
@@ -768,6 +919,69 @@ export default class I18nPlugin extends AdminForthPlugin {
   validateConfigAfterDiscover(adminforth: IAdminForth, resourceConfig: AdminForthResource) {
     // optional method where you can safely check field types after database discovery was performed
     // ensure each trFieldName (apart from enFieldName) is nullable column of type string
+    const backgroundJobsPlugin = adminforth.getPluginByClassName<any>('BackgroundJobsPlugin');
+
+    if (!backgroundJobsPlugin) {
+      throw new Error(`BackgroundJobsPlugin is required for ${this.constructor.name} to work, please add it to your plugins`);
+    }
+
+    backgroundJobsPlugin.registerTaskHandler({
+      // job handler name
+      jobHandlerName: 'translation_job_handler',
+      //handler function
+      handler: async ({ jobId, setTaskStateField, getTaskStateField }) => {
+        const initialState: {    
+          taskName: string,
+          prompt?: string,
+          strings?: { en_string: string, category: string }[], 
+          translations?: any[],
+          updateStrings?: Record<string, { updates: any, category: string, strId: string, enStr: string, translatedStr: string }>,
+          lang?: string,
+          failedToTranslate?: IFailedTranslation[],
+          needToTranslateByLang?: Record<string, any>,
+          promptCost?: number,
+        } = await getTaskStateField();
+
+        if ( initialState.prompt && initialState.strings && initialState.translations && initialState.updateStrings && initialState.lang && initialState.failedToTranslate && initialState.needToTranslateByLang) {
+          await this.generateAndSaveBunch(
+            initialState.prompt,
+            initialState.strings,
+            initialState.translations,
+            initialState.updateStrings,
+            initialState.lang,
+            initialState.failedToTranslate,
+            initialState.needToTranslateByLang,
+            jobId,
+            initialState.promptCost
+          );
+        }
+        afLogger.debug(`Translation task for language ${initialState.lang} completed.`);
+
+        const stateToSave = {
+          taskName: initialState.taskName,
+          lang: initialState.lang,
+          failedToTranslate: initialState.failedToTranslate,
+        }
+        await setTaskStateField(stateToSave);
+
+        this.adminforth.websocket.publish('/translation_progress', {});
+        if (initialState.failedToTranslate.length > 0) {
+          afLogger.error(`Failed to translate some strings for language ${initialState.lang} in plugin ${this.constructor.name}:, ${initialState.failedToTranslate}`);
+          throw new Error(`Failed to translate some strings for language ${initialState.lang}, check job details for more info`);
+        }
+      },
+      //limit of tasks, that are running in parallel
+      parallelLimit: this.options.parallelTranslationLimit || 20,
+    })
+
+    backgroundJobsPlugin.registerTaskDetailsComponent({
+      jobHandlerName: 'translation_job_handler', // Handler name
+      component: { 
+        file: this.componentPath('TranslationJobViewComponent.vue')  //custom component for the job details
+      },
+    })
+
+
     if (this.options.completeAdapter) {
       this.options.completeAdapter.validate();
     }
@@ -1071,28 +1285,78 @@ export default class I18nPlugin extends AdminForthPlugin {
       method: 'POST',
       path: `/plugin/${this.pluginInstanceId}/translate-selected-to-languages`,
       noAuth: false,
-      handler: async ({ body, tr }) => {
+      handler: async ({ body, tr, adminUser }) => {
         const selectedLanguages = body.selectedLanguages;
         const selectedIds = body.selectedIds;
+        
+        const jobId = await this.bulkTranslate({ selectedIds, selectedLanguages, adminUser });
 
-        let translatedCount = 0;
-        try {
-          translatedCount = await this.bulkTranslate({ selectedIds, selectedLanguages });
-        } catch (e) {
-          process.env.HEAVY_DEBUG && console.error('🪲⛔ bulkTranslate error', e);
-          if (e instanceof AiTranslateError) {
-            return { ok: false, error: e.message };
-          } 
-          throw e;
-        }
-        this.updateUntranslatedMenuBadge();
         return { 
           ok: true, 
-          error: undefined, 
-          successMessage: await tr(`Translated {count} items`, 'backend', {
-            count: translatedCount,
-          }),
+          jobId: jobId,
         };
+      }
+    });
+
+    server.endpoint({
+      method: 'POST',
+      path: `/plugin/${this.pluginInstanceId}/get_filtered_ids`,
+      handler: async ({ body, adminUser, headers, query, cookies, requestUrl }) => {
+        const resource = this.resourceConfig;
+
+        for (const hook of resource.hooks?.list?.beforeDatasourceRequest || []) {
+          const filterTools = filtersTools.get(body);
+          body.filtersTools = filterTools;
+          const resp = await hook({
+            resource,
+            query: body,
+            adminUser,
+            //@ts-ignore
+            filtersTools: filterTools, 
+            extra: {
+              body, query, headers, cookies, requestUrl
+            },
+            adminforth: this.adminforth,
+          });
+          if (!resp || (!resp.ok && !resp.error)) {
+            throw new Error(`Hook must return object with {ok: true} or { error: 'Error' } `);
+          }
+          if (resp.error) {
+            return { error: resp.error };
+          }
+        }
+        const filters = body.filters;
+
+        const normalizedFilters = { operator: AdminForthFilterOperators.AND, subFilters: [] };
+        if (filters) {
+          if (typeof filters !== 'object') {
+            throw new Error(`Filter should be an array or an object`);
+          }
+          if (Array.isArray(filters)) {
+            // if filters are an array, they will be connected with "AND" operator by default
+            normalizedFilters.subFilters = filters;
+          } else if (filters.field) {
+            // assume filter is a SingleFilter
+            normalizedFilters.subFilters = [filters];
+          } else if (filters.subFilters) {
+            // assume filter is a AndOr filter
+            normalizedFilters.operator = filters.operator;
+            normalizedFilters.subFilters = filters.subFilters;
+          } else {
+            // wrong filter
+            throw new Error(`Wrong filter object value: ${JSON.stringify(filters)}`);
+          }
+        }
+
+        const records = await this.adminforth.resource(this.resourceConfig.resourceId).list(normalizedFilters);
+        if (!records) {
+          return { ok: true, recordIds: [] };
+        }
+        const primaryKeyColumn = this.resourceConfig.columns.find((col) => col.primaryKey);
+
+        const recordIds = records.map(record => record[primaryKeyColumn.name]);
+
+        return { ok: true, recordIds }
       }
     });
 

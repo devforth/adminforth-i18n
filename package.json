@@ -35,7 +35,8 @@
     "country-flag-svg": "^1.0.19",
     "fs-extra": "^11.3.2",
     "iso-3166": "^4.3.0",
-    "iso-639-1": "^3.1.3"
+    "iso-639-1": "^3.1.3",
+    "p-limit": "^7.3.0"
   },
   "peerDependencies": {
     "adminforth": "next"
