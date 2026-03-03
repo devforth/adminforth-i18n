@@ -690,13 +690,17 @@ export default class I18nPlugin extends AdminForthPlugin {
     }
 
     const replacedLanguageCodeForTranslations = this.options.translateLangAsBCP47Code && langIsoCode.length === 2 ? this.options.translateLangAsBCP47Code[langIsoCode as any] : null;
-
+    const langSchema = parse(String(langIsoCode), 
+      { 
+        normalize: true, 
+      }
+    );
     const langCode = replacedLanguageCodeForTranslations ? replacedLanguageCodeForTranslations : langIsoCode;
     const lang = langIsoCode;
     const primaryLang = getPrimaryLanguageCode(lang);
     const langName = iso6391.getName(primaryLang);
     const requestSlavicPlurals = Object.keys(SLAVIC_PLURAL_EXAMPLES).includes(primaryLang) && plurals;
-    const region = String(lang).split('-')[1]?.toUpperCase() || '';
+    const region = langSchema.region;
     const basePrompt = `
       I need to translate strings in JSON to ${langName} language ${replacedLanguageCodeForTranslations || lang.length > 2 ? `BCP-47 code ${langCode}` : `ISO 639-1 code ${langIsoCode}`} from English for my web app.
 
