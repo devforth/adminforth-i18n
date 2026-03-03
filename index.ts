@@ -660,7 +660,7 @@ export default class I18nPlugin extends AdminForthPlugin {
 
   async getTranslateToLangTasks (
     langIsoCode: SupportedLanguage, 
-    strings: { en_string: string, category: string }[], 
+    strings: { id: string, en_string: string, category: string }[], 
     plurals=false,
     translations: any[],
     updateStrings: Record<string, { updates: any, category: string, strId: string, enStr: string, translatedStr: string }> = {},
@@ -671,20 +671,19 @@ export default class I18nPlugin extends AdminForthPlugin {
     const maxInputTokens = this.options.inputTokensPerBatch ?? 30000;
 
     const limit = pLimit(30); 
-    const enStringsTokenLengthCache: Record<string, any>[] = [];
+    const enStringsTokenLengthCache: Record<string, any> = {};
     
 
-    const tokenLengthPerString = async (str: string): Promise<void> => {
+    const tokenLengthPerString = async ({ str, id }: { str: string; id: string }): Promise<void> => {
       const objectToPush = {
         en_string: str,
         numOfTokens: await this.options.completeAdapter.measureTokensCount(`"${str}":"", \n`)
       };
-      enStringsTokenLengthCache.push(objectToPush);
+      enStringsTokenLengthCache[id] = objectToPush;
     }
-    const promises = strings.map(s => limit(() => tokenLengthPerString(s.en_string)));
+    const promises = strings.map(s => limit(() => tokenLengthPerString({ str: s.en_string, id: s.id })));
 
     await Promise.all(promises);
-
     if (strings.length === 0) {
       return;
     }
@@ -714,29 +713,32 @@ export default class I18nPlugin extends AdminForthPlugin {
       }
       \`\`\`
     `;
-    
+
     const failedToTranslate: IFailedTranslation[] = [];
     const basePromptTokenLength = await this.options.completeAdapter.measureTokensCount(basePrompt);
     const allowedTokensAmountForFields = maxInputTokens - basePromptTokenLength;
-    const stringsToTranslate = strings.map( s => s.en_string);
+    const stringsToTranslate: Record<string, { id: string; en_string: string; category: string }> = Object.fromEntries(strings.map(s => [s.id, s]));
     const generationTasksInitialData = []
-    while (stringsToTranslate.length !== 0) {
+    while (Object.keys(stringsToTranslate).length !== 0) {
       const stringBanch = [];
+      const stringIdsInBatch = [];
       let banchTokens = 0;
-      for (const string of stringsToTranslate) {
-        const numberOfTokensForString = enStringsTokenLengthCache.find(cache => cache.en_string === string)?.numOfTokens || 0;
+      for (const id of Object.keys(stringsToTranslate)) {
+        const { en_string } = stringsToTranslate[id];
+        const numberOfTokensForString = enStringsTokenLengthCache[id]?.numOfTokens || 0;
         if( banchTokens + numberOfTokensForString <= allowedTokensAmountForFields ) {
-          stringBanch.push(string);
+          stringBanch.push( en_string );
+          stringIdsInBatch.push(id);
           banchTokens += numberOfTokensForString;
         } else {
           continue;
         }
       }
       if ( stringBanch.length === 0 ) {
-        stringsToTranslate.forEach(s => {
+        Object.values(stringsToTranslate).forEach(s => {
           failedToTranslate.push({
             lang,
-            en_string: s,
+            en_string: s.en_string,
             failedReason: "Not enough input generation tokens"
           });
           generationTasksInitialData.push(
@@ -749,12 +751,11 @@ export default class I18nPlugin extends AdminForthPlugin {
         });
         break;
       }
-      for ( const string of stringBanch) {
-        const index = stringsToTranslate.indexOf(string);
-        if (index !== -1) {
-          stringsToTranslate.splice(index, 1);
-        }
+
+      for ( const id of stringIdsInBatch) {
+        delete stringsToTranslate[id];
       }
+
       const promptToGenerate = basePrompt.split(`\`\`\`json`)[0] + 
         `\`\`\`json
         {
@@ -797,6 +798,7 @@ export default class I18nPlugin extends AdminForthPlugin {
       Record<
         SupportedLanguage,
         {
+          id: string;
           en_string: string;
           category: string;
         }[]
@@ -816,6 +818,7 @@ export default class I18nPlugin extends AdminForthPlugin {
             needToTranslateByLang[lang] = [];
           }
           needToTranslateByLang[lang].push({
+            id: translation[this.primaryKeyFieldName],
             'en_string': translation[this.enFieldName],
             category: translation[this.options.categoryFieldName],
           })
@@ -835,7 +838,7 @@ export default class I18nPlugin extends AdminForthPlugin {
     let generationTasksInitialData = [];
     await Promise.all(
       Object.entries(needToTranslateByLang).map(
-        async ([lang, strings]: [SupportedLanguage, { en_string: string, category: string }[]]) => {
+        async ([lang, strings]: [SupportedLanguage, { id: string, en_string: string, category: string }[]]) => {
           // first translate without plurals
           const stringsWithoutPlurals = strings.filter(s => !s.en_string.includes('|'));
           const noPluralTranslationsTasks = await this.getTranslateToLangTasks(lang, stringsWithoutPlurals, false, translations, updateStrings, needToTranslateByLang, adminUser);
