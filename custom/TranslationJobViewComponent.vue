@@ -1,6 +1,6 @@
 
 <template>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 my-3">
       <div class="flex items-center space-x-1">
         <span class=" text-gray-500">{{ t('Total tokens will be used for translation:') }}</span>
         <span class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ new Number(props.job.state?.totalTranslationTokenCost).toLocaleString() || 0 }}</span>
@@ -32,11 +32,11 @@ import { onMounted, onUnmounted, ref } from 'vue';
 import websocket from '@/websocket';
 import { getCountryCodeFromLangCode } from './langCommon';
 import { getCustomComponent } from '@/utils';
-import { off } from 'process';
 
 const { t } = useI18n();
 
 const translationTasks = ref<{state: Record<string, any>, status: string}[]>([]);
+const currentPaginationWindow = ref({limit: 25, offset: 0});
 
 const props = defineProps<{
   meta: any;
@@ -57,18 +57,18 @@ const props = defineProps<{
 }>();
 
 onMounted(async () => {
-  const {tasks, total} = await props.getJobTasks(20, 0);
+  const {tasks, total} = await props.getJobTasks(currentPaginationWindow.value.limit, currentPaginationWindow.value.offset);
   translationTasks.value = tasks;
 
   websocket.subscribe(`/background-jobs-task-update/${props.job.id}`, (data: { taskIndex: number, status?: string, state?: Record<string, any> }) => {
-    
-    if (data.state) {
-      translationTasks.value[data.taskIndex].state = data.state;
+    if ( data.taskIndex <= currentPaginationWindow.value.offset + currentPaginationWindow.value.limit && data.taskIndex >= currentPaginationWindow.value.offset ) {
+      if (data.state) {
+        translationTasks.value[data.taskIndex].state = data.state;
+      }
+      if (data.status) {
+        translationTasks.value[data.taskIndex].status = data.status;
+      }
     }
-    if (data.status) {
-      translationTasks.value[data.taskIndex].status = data.status;
-    }
-
   });
 
 

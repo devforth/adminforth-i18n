@@ -533,6 +533,7 @@ export default class I18nPlugin extends AdminForthPlugin {
     });
 
     const jsonSchemaRequired = strings.map(s => s.en_string);
+    const dedupRequired = Array.from(new Set(jsonSchemaRequired));
     // call OpenAI
     const resp = await this.options.completeAdapter.complete(
       prompt,
@@ -544,7 +545,7 @@ export default class I18nPlugin extends AdminForthPlugin {
           schema: {
             type: "object",
             properties: jsonSchemaProperties,
-            required: jsonSchemaRequired,
+            required: dedupRequired,
           },
         },
       }
@@ -669,14 +670,14 @@ export default class I18nPlugin extends AdminForthPlugin {
 
     const maxInputTokens = this.options.inputTokensPerBatch ?? 30000;
 
-    const limit = pLimit(10); 
+    const limit = pLimit(30); 
     const enStringsTokenLengthCache: Record<string, any>[] = [];
     
 
     const tokenLengthPerString = async (str: string): Promise<void> => {
       const objectToPush = {
         en_string: str,
-        numOfTokens: await this.options.completeAdapter.measureTokensCount(`"${str}":"",`)
+        numOfTokens: await this.options.completeAdapter.measureTokensCount(`"${str}":"", \n`)
       };
       enStringsTokenLengthCache.push(objectToPush);
     }
@@ -698,11 +699,15 @@ export default class I18nPlugin extends AdminForthPlugin {
     const region = String(lang).split('-')[1]?.toUpperCase() || '';
     const basePrompt = `
       I need to translate strings in JSON to ${langName} language ${replacedLanguageCodeForTranslations || lang.length > 2 ? `BCP-47 code ${langCode}` : `ISO 639-1 code ${langIsoCode}`} from English for my web app.
+
+      
       ${region ? `Use the regional conventions for ${langCode} (region ${region}), including spelling, punctuation, and formatting.` : ''}
       ${requestSlavicPlurals ? `You should provide 4 slavic forms (in format "zero count | singular count | 2-4 | 5+") e.g. "apple | apples" should become "${SLAVIC_PLURAL_EXAMPLES[lang]}"` : ''}
       Keep keys, as is, write translation into values! If keys have variables (in curly brackets), then translated strings should have them as well (variables itself should not be translated). Here are the strings:
       \`\`\`json
+      {
 
+      }
       \`\`\`
     `;
     
@@ -747,9 +752,12 @@ export default class I18nPlugin extends AdminForthPlugin {
         }
       }
       const promptToGenerate = basePrompt.split(`\`\`\`json`)[0] + 
-        `\`\`\`json${
-          stringBanch.map(s => `"${s}": ""`)
+        `\`\`\`json
+        {
+          ${
+            stringBanch.map(s => `"${s}": ""`).join(",\n")
           }
+        }
         \`\`\``;
       const stringBanchCopy = [...stringBanch];
       generationTasksInitialData.push(
