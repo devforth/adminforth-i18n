@@ -26,7 +26,6 @@
 
 
 <script setup lang="ts">
-import { AdminForthComponentDeclarationFull } from 'adminforth';
 import { useI18n } from 'vue-i18n'
 import { onMounted, onUnmounted, ref } from 'vue';
 import websocket from '@/websocket';
@@ -52,7 +51,7 @@ const props = defineProps<{
     };
     progress: number; // 0 to 100
     createdAt: Date;
-    customComponent?: AdminForthComponentDeclarationFull; 
+    customComponent?: any; 
   };
 }>();
 
