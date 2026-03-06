@@ -1,0 +1,41 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      country-list:
+        specifier: ^2.4.1
+        version: 2.4.1
+      iso-639-1:
+        specifier: ^3.1.5
+        version: 3.1.5
+    devDependencies:
+      flag-icon-css:
+        specifier: ^4.1.7
+        version: 4.1.7
+
+packages:
+
+  country-list@2.4.1:
+    resolution: {integrity: sha512-KhVV/UfUV3dSNpsWIqHTQxLpYDKPKz1UwkRjadt+YbX2PRhyCEihEoS5XgB7J7AMXpkicvl+tRHvkNI5wbji/g==}
+
+  flag-icon-css@4.1.7:
+    resolution: {integrity: sha512-AFjSU+fv98XbU0vnTQ32vcLj89UEr1MhwDFcooQv14qWJCjg9fGZzfh9BVyDhAhIOZW/pGmJmq38RqpgPaeybQ==}
+    deprecated: The project has been renamed to flag-icons
+
+  iso-639-1@3.1.5:
+    resolution: {integrity: sha512-gXkz5+KN7HrG0Q5UGqSMO2qB9AsbEeyLP54kF1YrMsIxmu+g4BdB7rflReZTSTZGpfj8wywu6pfPBCylPIzGQA==}
+    engines: {node: '>=6.0'}
+
+snapshots:
+
+  country-list@2.4.1: {}
+
+  flag-icon-css@4.1.7: {}
+
+  iso-639-1@3.1.5: {}
