@@ -484,8 +484,9 @@ export default class I18nPlugin extends AdminForthPlugin {
     if (!resourceConfig.options.pageInjections.list.threeDotsDropdownItems) {
       resourceConfig.options.pageInjections.list.threeDotsDropdownItems = [];
     }
-
-    (resourceConfig.options.pageInjections.list.threeDotsDropdownItems as AdminForthComponentDeclaration[]).push(pageInjection);
+    if (this.options.completeAdapter) {
+      (resourceConfig.options.pageInjections.list.threeDotsDropdownItems as AdminForthComponentDeclaration[]).push(pageInjection);
+    }
 
     // if there is menu item with resourceId, add .badge function showing number of untranslated strings
     const addBadgeCountToMenuItem = (menuItem: AdminForthConfigMenuItem) => {
