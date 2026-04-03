@@ -63,10 +63,10 @@
   import 'flag-icon-css/css/flag-icons.min.css';
   import websocket from '@/websocket';
   import { useFiltersStore } from '@/stores/filters';
-  import { useJobInfoStore } from '@/custom/plugins/BackgroundJobsPlugin/useBackgroundJobPlugin.ts';
+  import { useBackgroundJobApi } from '@/custom/plugins/BackgroundJobsPlugin/useBackgroundJobApi.ts';
 
   const filtersStore = useFiltersStore();
-  const jobInfoStore = useJobInfoStore();
+  const jobInfoStore = useBackgroundJobApi();
 
   const { t } = useI18n();
   const adminforth = useAdminforth();
