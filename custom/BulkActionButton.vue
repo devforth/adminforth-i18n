@@ -63,8 +63,10 @@
   import 'flag-icon-css/css/flag-icons.min.css';
   import websocket from '@/websocket';
   import { useFiltersStore } from '@/stores/filters';
+  import { useJobInfoStore } from '@/custom/plugins/BackgroundJobsPlugin/useBackgroundJobPlugin.ts';
 
   const filtersStore = useFiltersStore();
+  const jobInfoStore = useJobInfoStore();
 
   const { t } = useI18n();
   const adminforth = useAdminforth();
@@ -138,8 +140,7 @@
           const jobId = res.jobId;
           if (jobId) {
             console.log('Opening job info popup for jobId:', jobId);
-            //@ts-ignore
-            window.OpenJobInfoPopup(jobId);
+            jobInfoStore.openJobInfoPopup(jobId);
           }
         } else {
           adminforth.alert({ message: res.errorMessage || t('Failed to translate selected items. Please, try again.'), variant: 'danger' });
