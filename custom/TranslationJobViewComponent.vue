@@ -1,17 +1,17 @@
 
 <template>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 my-3 mt-9">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 my-3 mt-5">
       <div class="flex items-center space-x-1">
-        <span class=" text-gray-500">{{ t('Total tokens will be used for translation:') }}</span>
+        <span class="text-gray-300">{{ t('Total tokens will be used for translation:') }}</span>
         <span class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ new Number(props.job.state?.totalTranslationTokenCost).toLocaleString() || 0 }}</span>
       </div>
       <div class="flex items-center space-x-1">
-        <span class=" text-gray-500">{{ t('Total translation token used:') }}</span>
+        <span class="text-gray-300">{{ t('Total translation token used:') }}</span>
         <span class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ new Number(props.job.state?.totalUsedTokens).toLocaleString() || 0 }}</span>
       </div>
     </div> 
     <div class="grid grid-cols-3 gap-2">
-      <div class="bg-gray-50 hover:bg-gray-100 transition-all px-2 py-2 rounded-md border max-w-64 w-full flex items-center gap-2" v-for="(task, index) in translationTasks" :key="index">
+      <div class="bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 border-gray-200 dark:border-gray-700 transition-all px-2 py-2 rounded-md border max-w-64 w-full flex items-center gap-2" v-for="(task, index) in translationTasks" :key="index">
         {{  task.state?.taskName }} to
           <span class="flag-icon"
             :class="`flag-icon-${getCountryCodeFromLangCode(task.state?.lang)}`"
