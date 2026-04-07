@@ -24,7 +24,7 @@
     "vue-i18n"
   ],
   "author": "devforth",
-  "license": "ISC",
+  "license": "MIT",
   "description": "Internationalization/translation plugin for AdminForth",
   "dependencies": {
     "@aws-sdk/client-ses": "^3.654.0",
