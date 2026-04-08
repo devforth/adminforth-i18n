@@ -1,14 +1,14 @@
 import { CompletionAdapter, EmailAdapter } from 'adminforth';
 import type { LanguageCode } from 'iso-639-1';
 import { iso31661Alpha2ToAlpha3 } from 'iso-3166';
-
+import  {type PluginsCommonOptions } from "adminforth";
 
 // BCP-47 support for types only: primary subtag is ISO 639-1, optional region
 type Alpha2Code = keyof typeof iso31661Alpha2ToAlpha3;
 type Bcp47LanguageTag = `${LanguageCode}-${Alpha2Code}`;
 export type SupportedLanguage = LanguageCode | Bcp47LanguageTag;
 
-export interface PluginOptions {
+export interface PluginOptions extends PluginsCommonOptions {
 
   /* List of language codes which you want to support. Can be either short ISO 639-1 language codes or/and BCP47 tags */
   supportedLanguages: SupportedLanguage[];
