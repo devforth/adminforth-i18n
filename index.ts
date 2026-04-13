@@ -538,17 +538,15 @@ export default class I18nPlugin extends AdminForthPlugin {
     // call OpenAI
     const resp = await this.options.completeAdapter.complete(
       prompt,
-      [],
       prompt.length * 2,
       {
-        json_schema: {
           name: "translation_response",
           schema: {
             type: "object",
             properties: jsonSchemaProperties,
             required: dedupRequired,
+            additionalProperties: false,
           },
-        },
       }
     );
     
