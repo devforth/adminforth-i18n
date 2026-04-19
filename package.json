@@ -38,10 +38,11 @@
     "p-limit": "^7.3.0"
   },
   "peerDependencies": {
-    "adminforth": "^2.30.0"
+    "adminforth": "^2.35.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",
+    "adminforth": "^2.35.0",
     "i18n-iso-countries": "^7.13.0",
     "semantic-release": "^24.2.1",
     "semantic-release-slack-bot": "^4.0.2",
