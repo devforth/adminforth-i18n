@@ -23,7 +23,7 @@
     "language",
     "vue-i18n"
   ],
-  "author": "devforth",
+  "author": "DevForth (https://devforth.io)",
   "license": "MIT",
   "description": "Internationalization/translation plugin for AdminForth",
   "dependencies": {
