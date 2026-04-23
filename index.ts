@@ -536,19 +536,19 @@ export default class I18nPlugin extends AdminForthPlugin {
     const jsonSchemaRequired = strings.map(s => s.en_string);
     const dedupRequired = Array.from(new Set(jsonSchemaRequired));
     // call OpenAI
-    const resp = await this.options.completeAdapter.complete(
-      prompt,
-      prompt.length * 2,
-      {
-          name: "translation_response",
-          schema: {
-            type: "object",
-            properties: jsonSchemaProperties,
-            required: dedupRequired,
-            additionalProperties: false,
-          },
-      }
-    );
+    const resp = await this.options.completeAdapter.complete({
+      content: prompt,
+      maxTokens: prompt.length * 2,
+      outputSchema: {
+        name: "translation_response",
+        schema: {
+          type: "object",
+          properties: jsonSchemaProperties,
+          required: dedupRequired,
+          additionalProperties: false,
+        },
+      },
+    });
     
     process.env.HEAVY_DEBUG && console.log(`🪲🔪LLM resp >> ${prompt.length}, <<${resp.content.length} :\n\n`, JSON.stringify(resp));
     
