@@ -514,7 +514,7 @@ export default class I18nPlugin extends AdminForthPlugin {
 
   async generateAndSaveBunch (
     prompt: string,
-    strings: { en_string: string, category: string }[], 
+    strings: { en_string: string, category: string, schemaKey?: string }[], 
     translations: any[],
     updateStrings: Record<string, { updates: any, category: string, strId: string, enStr: string, translatedStr: string }> = {},
     lang: string,
@@ -526,20 +526,27 @@ export default class I18nPlugin extends AdminForthPlugin {
 
     // return [];
     const jsonSchemaProperties = {};
+    const schemaKeyToEnString = new Map<string, string>();
+    const enStringToSchemaKey = new Map<string, string>();
     strings.forEach(s => {
-      jsonSchemaProperties[s.en_string] = { 
+      if (!enStringToSchemaKey.has(s.en_string)) {
+        enStringToSchemaKey.set(s.en_string, s.schemaKey || `text_${enStringToSchemaKey.size}`);
+      }
+    });
+    enStringToSchemaKey.forEach((schemaKey, enString) => {
+      schemaKeyToEnString.set(schemaKey, enString);
+      jsonSchemaProperties[schemaKey] = { 
         type: 'string',
         minLength: 1,
       };
     });
 
-    const jsonSchemaRequired = strings.map(s => s.en_string);
-    const dedupRequired = Array.from(new Set(jsonSchemaRequired));
+    const dedupRequired = Array.from(schemaKeyToEnString.keys());
     // call OpenAI
-    const resp = await this.options.completeAdapter.complete({
-      content: prompt,
-      maxTokens: prompt.length * 2,
-      outputSchema: {
+    const resp = await this.options.completeAdapter.complete(
+      prompt,
+      prompt.length * 2,
+      {
         name: "translation_response",
         schema: {
           type: "object",
@@ -547,8 +554,8 @@ export default class I18nPlugin extends AdminForthPlugin {
           required: dedupRequired,
           additionalProperties: false,
         },
-      },
-    });
+      }
+    );
     
     process.env.HEAVY_DEBUG && console.log(`🪲🔪LLM resp >> ${prompt.length}, <<${resp.content.length} :\n\n`, JSON.stringify(resp));
     
@@ -597,7 +604,8 @@ export default class I18nPlugin extends AdminForthPlugin {
     }
 
 
-    for (const [enStr, translatedStr] of Object.entries(res) as [string, string][]) {
+    for (const [schemaKey, translatedStr] of Object.entries(res) as [string, string][]) {
+      const enStr = schemaKeyToEnString.get(schemaKey) || schemaKey;
       const translationsTargeted = translations.filter(t => t[this.enFieldName] === enStr);
       // might be several with same en_string
       for (const translation of translationsTargeted) {
@@ -705,7 +713,7 @@ export default class I18nPlugin extends AdminForthPlugin {
       
       ${region ? `Use the regional conventions for ${langCode} (region ${region}), including spelling, punctuation, and formatting.` : ''}
       ${requestSlavicPlurals ? `You should provide 4 slavic forms (in format "zero count | singular count | 2-4 | 5+") e.g. "apple | apples" should become "${SLAVIC_PLURAL_EXAMPLES[lang]}"` : ''}
-      Keep keys, as is, write translation into values! If keys have variables (in curly brackets), then translated strings should have them as well (variables itself should not be translated). Here are the strings:
+      JSON keys are internal identifiers. Keep keys as is and write translations into values. If values have variables (in curly brackets), then translated strings should have them as well (variables itself should not be translated). Here are the strings:
       \`\`\`json
       {
 
@@ -759,17 +767,27 @@ export default class I18nPlugin extends AdminForthPlugin {
         `\`\`\`json
         {
           ${
-            stringBanch.map(s => `"${s}": ""`).join(",\n")
+            Array.from(new Set(stringBanch))
+              .map((s, index) => `"text_${index}": ${JSON.stringify(s)}`)
+              .join(",\n")
           }
         }
         \`\`\``;
       const stringBanchCopy = [...stringBanch];
+      const schemaKeyByEnString = Object.fromEntries(
+        Array.from(new Set(stringBanch)).map((s, index) => [s, `text_${index}`])
+      );
       generationTasksInitialData.push(
         {
           state: {
             taskName: `Translate ${strings.length} strings`,
             prompt: promptToGenerate,
-            strings: strings.filter(s => stringBanchCopy.includes(s.en_string)),
+            strings: strings
+              .filter(s => stringBanchCopy.includes(s.en_string))
+              .map(s => ({
+                ...s,
+                schemaKey: schemaKeyByEnString[s.en_string],
+              })),
             translations: translations.filter(t => stringBanchCopy.includes(t.en_string)),
             updateStrings,
             lang,
