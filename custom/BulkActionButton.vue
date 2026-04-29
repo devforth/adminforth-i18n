@@ -1,5 +1,6 @@
 <template>
   <Dialog 
+    ref="dialogRef"
     class="w-[600px]"
     :buttons="[
       { 
@@ -85,6 +86,16 @@
     };
     clearCheckboxes: () => void;
   }>();
+
+
+  const dialogRef = ref();
+  async function openDialog(dialog: any) {
+    dialogRef.value.open();
+  }
+
+  defineExpose({
+    click: openDialog,
+  });
 
   const checkedLanguages = ref<Record<string, boolean>>({});
   const isLoading = ref(false);
