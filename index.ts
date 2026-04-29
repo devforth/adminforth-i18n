@@ -543,10 +543,10 @@ export default class I18nPlugin extends AdminForthPlugin {
 
     const dedupRequired = Array.from(schemaKeyToEnString.keys());
     // call OpenAI
-    const resp = await this.options.completeAdapter.complete(
-      prompt,
-      prompt.length * 2,
-      {
+    const resp = await this.options.completeAdapter.complete({
+      content: prompt,
+      maxTokens: prompt.length * 2,
+      outputSchema: {
         name: "translation_response",
         schema: {
           type: "object",
@@ -554,8 +554,8 @@ export default class I18nPlugin extends AdminForthPlugin {
           required: dedupRequired,
           additionalProperties: false,
         },
-      }
-    );
+      },
+    });
     
     process.env.HEAVY_DEBUG && console.log(`🪲🔪LLM resp >> ${prompt.length}, <<${resp.content.length} :\n\n`, JSON.stringify(resp));
     
