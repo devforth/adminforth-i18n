@@ -2,11 +2,11 @@
 <template>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 my-3 mt-5">
       <div class="flex items-center space-x-1">
-        <span class="text-gray-300">{{ t('Total tokens will be used for translation:') }}</span>
+        <span class="text-gray-600 dark:text-gray-300">{{ t('Total tokens will be used for translation:') }}</span>
         <span class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ new Number(props.job.state?.totalTranslationTokenCost).toLocaleString() || 0 }}</span>
       </div>
       <div class="flex items-center space-x-1">
-        <span class="text-gray-300">{{ t('Total translation token used:') }}</span>
+        <span class="text-gray-600 dark:text-gray-300">{{ t('Total translation token used:') }}</span>
         <span class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ new Number(props.job.state?.totalUsedTokens).toLocaleString() || 0 }}</span>
       </div>
     </div> 
