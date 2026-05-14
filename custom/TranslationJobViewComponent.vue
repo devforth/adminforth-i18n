@@ -11,8 +11,11 @@
       </div>
     </div> 
     <div class="grid grid-cols-3 gap-2">
-      <div class="bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 border-gray-200 dark:border-gray-700 transition-all px-2 py-2 rounded-md border max-w-64 w-full flex items-center gap-2" v-for="(task, index) in translationTasks" :key="index">
-        {{  task.state?.taskName }} to
+      <div class="bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 border-gray-200 dark:border-gray-700 transition-all px-2 py-2 rounded-md border max-w-64 w-full flex items-center justify-between gap-2" v-for="(task, index) in translationTasks" :key="index">
+        <span class="truncate">
+          {{  task.state?.taskName }} to
+        </span>
+        <div class="flex items-center gap-2 shrink-0">
           <span class="flag-icon"
             :class="`flag-icon-${getCountryCodeFromLangCode(task.state?.lang)}`"
           ></span>
@@ -20,6 +23,7 @@
             :is="getCustomComponent({file: '@@/plugins/BackgroundJobsPlugin/StateToIcon.vue'})" 
             :status="task.status"
           />
+        </div>
       </div>
     </div>
 </template>
