@@ -11,7 +11,11 @@
       </div>
     </div> 
     <div class="grid grid-cols-3 gap-2">
-      <div class="bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 border-gray-200 dark:border-gray-700 transition-all px-2 py-2 rounded-md border max-w-64 w-full flex items-center justify-between gap-2" v-for="(task, index) in translationTasks" :key="index">
+      <div 
+        class="bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 border-gray-200 dark:border-gray-700 transition-all px-2 py-2 rounded-md border max-w-64 w-full flex items-center justify-between gap-2" 
+        v-for="(task, index) in translationTasks" 
+        :key="index"
+      >
         <span class="truncate">
           {{  task.state?.taskName }} to
         </span>
@@ -44,7 +48,7 @@ const currentPaginationWindow = ref({limit: 25, offset: 0});
 const props = defineProps<{
   meta: any;
   getJobTasks: (limit?: number, offset?: number) => Promise<
-  {tasks: {state: Record<string, any>, status: string}[], total: number}>;
+  {state: Record<string, any>, status: string}[]>;
   job: {
     id: string;
     name: string;
@@ -60,9 +64,7 @@ const props = defineProps<{
 }>();
 
 onMounted(async () => {
-  const {tasks, total} = await props.getJobTasks(currentPaginationWindow.value.limit, currentPaginationWindow.value.offset);
-  translationTasks.value = tasks;
-
+  translationTasks.value = await props.getJobTasks(currentPaginationWindow.value.limit, currentPaginationWindow.value.offset);
   websocket.subscribe(`/background-jobs-task-update/${props.job.id}`, (data: { taskIndex: number, status?: string, state?: Record<string, any> }) => {
     if ( data.taskIndex <= currentPaginationWindow.value.offset + currentPaginationWindow.value.limit && data.taskIndex >= currentPaginationWindow.value.offset ) {
       if (data.state) {
