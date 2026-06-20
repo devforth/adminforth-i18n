@@ -1254,7 +1254,9 @@ export default class I18nPlugin extends AdminForthPlugin {
       path: `/plugin/${this.pluginInstanceId}/update-field`,
       handler: async ({ body, adminUser, headers }) => {
         const { resourceId, recordId, field, value, reviewed } = body;
-
+        if (resourceId !== this.resourceConfig.resourceId) {
+          return { error: 'Invalid resourceId' };
+        }
         const resource = this.adminforth.config.resources.find(r => r.resourceId === resourceId);
         // Create update object with just the single field
         const updateRecord = { [field]: value };
