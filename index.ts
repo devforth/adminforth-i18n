@@ -1257,6 +1257,12 @@ export default class I18nPlugin extends AdminForthPlugin {
         if (resourceId !== this.resourceConfig.resourceId) {
           return { error: 'Invalid resourceId' };
         }
+        if (!field) {
+          return { error: 'No field provided' };
+        }
+        if (recordId === undefined || recordId === null) {
+          return { error: 'No recordId provided' };
+        }
         const resource = this.adminforth.config.resources.find(r => r.resourceId === resourceId);
         // Create update object with just the single field
         const updateRecord = { [field]: value };
@@ -1269,6 +1275,11 @@ export default class I18nPlugin extends AdminForthPlugin {
         await lock.run(`edit-trans-${recordId}`,  async () => {
           // put into lock so 2 editors will not update the same record at the same time
           oldRecord = await connector.getRecordByPrimaryKey(resource, recordId)
+
+          if (!oldRecord) {
+            result = { error: 'Record not found' };
+            return;
+          }
 
           if (this.options.reviewedCheckboxesFieldName) {
             let oldValue;
@@ -1307,7 +1318,11 @@ export default class I18nPlugin extends AdminForthPlugin {
       handler: async ({ body, tr, adminUser }) => {
         const selectedLanguages = body.selectedLanguages;
         const selectedIds = body.selectedIds;
-        
+
+        if (!Array.isArray(selectedIds) || selectedIds.length === 0) {
+          return { ok: false, error: 'No records selected' };
+        }
+
         const jobId = await this.bulkTranslate({ selectedIds, selectedLanguages, adminUser });
 
         return { 
