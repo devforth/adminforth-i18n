@@ -1,4 +1,4 @@
-import AdminForth, { AdminForthPlugin, Filters, suggestIfTypo, AdminForthDataTypes, RAMLock, filtersTools, AdminForthFilterOperators } from "adminforth";
+import AdminForth, { AdminForthPlugin, parseBody, Filters, suggestIfTypo, AdminForthDataTypes, RAMLock, filtersTools, AdminForthFilterOperators } from "adminforth";
 import type { IAdminForth, IHttpServer, AdminForthComponentDeclaration, AdminForthResourceColumn, AdminForthResource, BeforeLoginConfirmationFunction, AdminForthConfigMenuItem, AdminUser } from "adminforth";
 import type { PluginOptions, SupportedLanguage } from './types.js';
 import { z } from "zod";
@@ -1250,22 +1250,6 @@ export default class I18nPlugin extends AdminForthPlugin {
   }
 
 
-  private parseBody<T>(
-    schema: z.ZodType<T>,
-    body: unknown,
-    response: { setStatus: (code: number, message: string) => void },
-  ): { ok: true; data: T } | { ok: false; error: { error: string; details: unknown } } {
-    const parsed = schema.safeParse(body ?? {});
-    if (!parsed.success) {
-      response.setStatus(400, '');
-      return {
-        ok: false,
-        error: { error: 'Request body validation failed', details: parsed.error.issues },
-      };
-    }
-    return { ok: true, data: parsed.data };
-  }
-
   setupEndpoints(server: IHttpServer) {
     server.endpoint({
       method: 'GET',
@@ -1287,7 +1271,7 @@ export default class I18nPlugin extends AdminForthPlugin {
       method: 'POST',
       path: `/plugin/${this.pluginInstanceId}/update-field`,
       handler: async ({ body, adminUser, headers, response }) => {
-        const parsed = this.parseBody(updateFieldBodySchema, body, response);
+        const parsed = parseBody(updateFieldBodySchema, body, response);
         if ('error' in parsed) return parsed.error;
         const data = parsed.data;
         const { resourceId, recordId, field, value, reviewed } = data;
@@ -1353,7 +1337,7 @@ export default class I18nPlugin extends AdminForthPlugin {
       path: `/plugin/${this.pluginInstanceId}/translate-selected-to-languages`,
       noAuth: false,
       handler: async ({ body, tr, adminUser, response }) => {
-        const parsed = this.parseBody(translateSelectedBodySchema, body, response);
+        const parsed = parseBody(translateSelectedBodySchema, body, response);
         if ('error' in parsed) return parsed.error;
         const data = parsed.data;
         const selectedLanguages = data.selectedLanguages;
@@ -1380,7 +1364,7 @@ export default class I18nPlugin extends AdminForthPlugin {
       method: 'POST',
       path: `/plugin/${this.pluginInstanceId}/get_filtered_ids`,
       handler: async ({ body, adminUser, headers, query, cookies, requestUrl, response }) => {
-        const parsed = this.parseBody(getFilteredIdsBodySchema, body, response);
+        const parsed = parseBody(getFilteredIdsBodySchema, body, response);
         if ('error' in parsed) return parsed.error;
         const data = parsed.data;
         const resource = this.resourceConfig;
