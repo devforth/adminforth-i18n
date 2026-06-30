@@ -27,6 +27,7 @@
   "license": "MIT",
   "description": "Internationalization/translation plugin for AdminForth",
   "dependencies": {
+    "zod": "^4.3.6",
     "@aws-sdk/client-ses": "^3.654.0",
     "@sapphire/async-queue": "^1.5.5",
     "bcp-47": "^2.1.0",

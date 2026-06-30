@@ -1,7 +1,25 @@
 import AdminForth, { AdminForthPlugin, Filters, suggestIfTypo, AdminForthDataTypes, RAMLock, filtersTools, AdminForthFilterOperators } from "adminforth";
 import type { IAdminForth, IHttpServer, AdminForthComponentDeclaration, AdminForthResourceColumn, AdminForthResource, BeforeLoginConfirmationFunction, AdminForthConfigMenuItem, AdminUser } from "adminforth";
 import type { PluginOptions, SupportedLanguage } from './types.js';
+import { z } from "zod";
 import iso6391 from 'iso-639-1';
+
+const updateFieldBodySchema = z.object({
+  resourceId: z.string(),
+  recordId: z.union([z.string(), z.number()]),
+  field: z.string(),
+  value: z.unknown(),
+  reviewed: z.boolean().nullish(),
+}).strict();
+
+const translateSelectedBodySchema = z.object({
+  selectedLanguages: z.array(z.string()).optional(),
+  selectedIds: z.array(z.union([z.string(), z.number()])),
+}).strict();
+
+const getFilteredIdsBodySchema = z.object({
+  filters: z.any(),
+}).passthrough();
 import { iso31661Alpha2ToAlpha3 } from 'iso-3166';
 import path from 'path';
 import fs from 'fs-extra';
@@ -1232,6 +1250,19 @@ export default class I18nPlugin extends AdminForthPlugin {
   }
 
 
+  private parseBody<T>(
+    schema: z.ZodType<T>,
+    body: unknown,
+    response: { setStatus: (code: number, message: string) => void },
+  ): T | null {
+    const parsed = schema.safeParse(body ?? {});
+    if (!parsed.success) {
+      response.setStatus(422, parsed.error.message);
+      return null;
+    }
+    return parsed.data;
+  }
+
   setupEndpoints(server: IHttpServer) {
     server.endpoint({
       method: 'GET',
@@ -1252,8 +1283,10 @@ export default class I18nPlugin extends AdminForthPlugin {
     server.endpoint({
       method: 'POST',
       path: `/plugin/${this.pluginInstanceId}/update-field`,
-      handler: async ({ body, adminUser, headers }) => {
-        const { resourceId, recordId, field, value, reviewed } = body;
+      handler: async ({ body, adminUser, headers, response }) => {
+        const data = this.parseBody(updateFieldBodySchema, body, response);
+        if (!data) return;
+        const { resourceId, recordId, field, value, reviewed } = data;
         if (resourceId !== this.resourceConfig.resourceId) {
           return { error: 'Invalid resourceId' };
         }
@@ -1274,7 +1307,7 @@ export default class I18nPlugin extends AdminForthPlugin {
         let result;
         await lock.run(`edit-trans-${recordId}`,  async () => {
           // put into lock so 2 editors will not update the same record at the same time
-          oldRecord = await connector.getRecordByPrimaryKey(resource, recordId)
+          oldRecord = await connector.getRecordByPrimaryKey(resource, recordId as string)
 
           if (!oldRecord) {
             result = { error: 'Record not found' };
@@ -1305,7 +1338,7 @@ export default class I18nPlugin extends AdminForthPlugin {
           return { error: result.error };
         }
 
-        const updatedRecord = await connector.getRecordByPrimaryKey(resource, recordId);
+        const updatedRecord = await connector.getRecordByPrimaryKey(resource, recordId as string);
 
         return { record: updatedRecord };
       }
@@ -1315,15 +1348,21 @@ export default class I18nPlugin extends AdminForthPlugin {
       method: 'POST',
       path: `/plugin/${this.pluginInstanceId}/translate-selected-to-languages`,
       noAuth: false,
-      handler: async ({ body, tr, adminUser }) => {
-        const selectedLanguages = body.selectedLanguages;
-        const selectedIds = body.selectedIds;
+      handler: async ({ body, tr, adminUser, response }) => {
+        const data = this.parseBody(translateSelectedBodySchema, body, response);
+        if (!data) return;
+        const selectedLanguages = data.selectedLanguages;
+        const selectedIds = data.selectedIds;
 
         if (!Array.isArray(selectedIds) || selectedIds.length === 0) {
           return { ok: false, error: 'No records selected' };
         }
 
-        const jobId = await this.bulkTranslate({ selectedIds, selectedLanguages, adminUser });
+        const jobId = await this.bulkTranslate({
+          selectedIds: selectedIds as string[],
+          selectedLanguages: selectedLanguages as SupportedLanguage[] | undefined,
+          adminUser,
+        });
 
         return { 
           ok: true, 
@@ -1335,7 +1374,9 @@ export default class I18nPlugin extends AdminForthPlugin {
     server.endpoint({
       method: 'POST',
       path: `/plugin/${this.pluginInstanceId}/get_filtered_ids`,
-      handler: async ({ body, adminUser, headers, query, cookies, requestUrl }) => {
+      handler: async ({ body, adminUser, headers, query, cookies, requestUrl, response }) => {
+        const data = this.parseBody(getFilteredIdsBodySchema, body, response);
+        if (!data) return;
         const resource = this.resourceConfig;
 
         for (const hook of resource.hooks?.list?.beforeDatasourceRequest || []) {
