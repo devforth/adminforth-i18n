@@ -1,4 +1,4 @@
-import AdminForth, { AdminForthPlugin, parseBody, Filters, suggestIfTypo, AdminForthDataTypes, RAMLock, filtersTools, AdminForthFilterOperators } from "adminforth";
+import AdminForth, { AdminForthPlugin, Filters, suggestIfTypo, AdminForthDataTypes, RAMLock, filtersTools, AdminForthFilterOperators } from "adminforth";
 import type { IAdminForth, IHttpServer, AdminForthComponentDeclaration, AdminForthResourceColumn, AdminForthResource, BeforeLoginConfirmationFunction, AdminForthConfigMenuItem, AdminUser } from "adminforth";
 import type { PluginOptions, SupportedLanguage } from './types.js';
 import { z } from "zod";
@@ -1270,10 +1270,9 @@ export default class I18nPlugin extends AdminForthPlugin {
     server.endpoint({
       method: 'POST',
       path: `/plugin/${this.pluginInstanceId}/update-field`,
+      request_schema: updateFieldBodySchema,
       handler: async ({ body, adminUser, headers, response }) => {
-        const parsed = parseBody(updateFieldBodySchema, body, response);
-        if ('error' in parsed) return parsed.error;
-        const data = parsed.data;
+        const data = body as z.infer<typeof updateFieldBodySchema>;
         const { resourceId, recordId, field, value, reviewed } = data;
         if (resourceId !== this.resourceConfig.resourceId) {
           return { error: 'Invalid resourceId' };
@@ -1336,10 +1335,9 @@ export default class I18nPlugin extends AdminForthPlugin {
       method: 'POST',
       path: `/plugin/${this.pluginInstanceId}/translate-selected-to-languages`,
       noAuth: false,
+      request_schema: translateSelectedBodySchema,
       handler: async ({ body, tr, adminUser, response }) => {
-        const parsed = parseBody(translateSelectedBodySchema, body, response);
-        if ('error' in parsed) return parsed.error;
-        const data = parsed.data;
+        const data = body as z.infer<typeof translateSelectedBodySchema>;
         const selectedLanguages = data.selectedLanguages;
         const selectedIds = data.selectedIds;
 
@@ -1363,10 +1361,8 @@ export default class I18nPlugin extends AdminForthPlugin {
     server.endpoint({
       method: 'POST',
       path: `/plugin/${this.pluginInstanceId}/get_filtered_ids`,
+      request_schema: getFilteredIdsBodySchema,
       handler: async ({ body, adminUser, headers, query, cookies, requestUrl, response }) => {
-        const parsed = parseBody(getFilteredIdsBodySchema, body, response);
-        if ('error' in parsed) return parsed.error;
-        const data = parsed.data;
         const resource = this.resourceConfig;
 
         for (const hook of resource.hooks?.list?.beforeDatasourceRequest || []) {
