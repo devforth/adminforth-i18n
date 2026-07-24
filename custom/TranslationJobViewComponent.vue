@@ -23,9 +23,10 @@
           <span class="flag-icon"
             :class="`flag-icon-${getCountryCodeFromLangCode(task.state?.lang)}`"
           ></span>
-          <component 
-            :is="getCustomComponent({file: '@@/plugins/BackgroundJobsPlugin/StateToIcon.vue'})" 
+          <component
+            :is="getCustomComponent({file: '@@/plugins/BackgroundJobsPlugin/StateToIcon.vue'})"
             :status="task.status"
+            :error="task.state?.error"
           />
         </div>
       </div>
@@ -75,12 +76,15 @@ onMounted(async () => {
       }
     }
   });
-
+  websocket.subscribe(`/background-jobs-task-error/${props.job.id}`, (data: { taskIndex: number, status?: string, state?: Record<string, any> }) => {
+    console.log('Error received for task', data);
+  });
 
 });
 
 onUnmounted(() => {
   websocket.unsubscribe(`/background-jobs-task-update/${props.job.id}`);
+  websocket.unsubscribe(`/background-jobs-task-error/${props.job.id}`);
 });
 
 

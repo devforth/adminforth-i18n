@@ -1116,7 +1116,7 @@ export default class I18nPlugin extends AdminForthPlugin {
           await this.cache.set(cacheKey, result);
         }
         // if msg has '|' in it, then we need to aplly pluralization
-        if (msg.includes('|')) {
+        if (msg.includes('|') && pluralizationNumber !== undefined) {
           result = this.applyPluralization(result, pluralizationNumber, lang);
         }
 
