@@ -540,7 +540,7 @@ export default class I18nPlugin extends AdminForthPlugin {
     needToTranslateByLang: Record<string, any> = {},
     jobId: string,
     promptCost: number,
-  ): Promise<void>{
+  ): Promise<{ ok: boolean, error?: string }>{
 
     // return [];
     const jsonSchemaProperties = {};
@@ -578,7 +578,7 @@ export default class I18nPlugin extends AdminForthPlugin {
     process.env.HEAVY_DEBUG && console.log(`🪲🔪LLM resp >> ${prompt.length}, <<${resp.content.length} :\n\n`, JSON.stringify(resp));
     
     if (resp.error) {
-      throw new AiTranslateError(resp.error);
+      return { ok: false, error: resp.error };
     }
 
     let res;
@@ -593,7 +593,7 @@ export default class I18nPlugin extends AdminForthPlugin {
           failedReason: "Error in parsing LLM response"
         });
       });
-      return null;
+      return { ok: false, error: 'Error in parsing LLM response' };
     }
 
     const backgroundJobsPlugin = this.adminforth.getPluginByClassName<any>('BackgroundJobsPlugin');
@@ -618,7 +618,7 @@ export default class I18nPlugin extends AdminForthPlugin {
           failedReason: "Error in parsing LLM response JSON"
         });
       });
-      return null;
+      return { ok: false, error: 'Error in parsing LLM response JSON' };
     }
 
 
@@ -681,6 +681,7 @@ export default class I18nPlugin extends AdminForthPlugin {
       }
     }
 
+    return { ok: true };
   }
 
   async getTranslateToLangTasks (
@@ -976,9 +977,10 @@ export default class I18nPlugin extends AdminForthPlugin {
           needToTranslateByLang?: Record<string, any>,
           promptCost?: number,
         } = await getTaskStateField();
+        let bunchResult: { ok: boolean, error?: string } | undefined;
 
         if ( initialState.prompt && initialState.strings && initialState.translations && initialState.updateStrings && initialState.lang && initialState.failedToTranslate && initialState.needToTranslateByLang) {
-          await this.generateAndSaveBunch(
+          bunchResult = await this.generateAndSaveBunch(
             initialState.prompt,
             initialState.strings,
             initialState.translations,
@@ -1000,6 +1002,10 @@ export default class I18nPlugin extends AdminForthPlugin {
         await setTaskStateField(stateToSave);
 
         this.adminforth.websocket.publish('/translation_progress', {});
+        if (bunchResult && !bunchResult.ok) {
+          afLogger.error(`Failed to translate bunch for language ${initialState.lang} in plugin ${this.constructor.name}: ${bunchResult.error}`);
+          throw new AiTranslateError(bunchResult.error);
+        }
         if (initialState.failedToTranslate.length > 0) {
           afLogger.error(`Failed to translate some strings for language ${initialState.lang} in plugin ${this.constructor.name}:, ${initialState.failedToTranslate}`);
           throw new Error(`Failed to translate some strings for language ${initialState.lang}, check job details for more info`);
