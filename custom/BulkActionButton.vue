@@ -23,7 +23,7 @@
       <button class="flex items-center justify-center w-full">
         <IconLanguageOutline class="text-gray-500 dark:text-gray-400 w-5 h-5" />
         <div class="flex items-end justify-start gap-2 cursor-pointer">
-          <p class="text-justify max-h-[18px] truncate max-w-[60vw] md:max-w-none">{{ t('Translate filtered') }}</p>
+          <p class="text-justify max-h-[18px] truncate max-w-[60vw] md:max-w-none">{{props.checkboxes.length === 0 ? t('Translate filtered') : t('Translate selected ({count})', { count: props.checkboxes.length })}}</p>
             <div class="flex items-center justify-center text-white bg-gradient-to-r h-[18px] from-purple-500 via-purple-600 to-purple-700 hover:bg-gradient-to-br focus:ring-4 focus:outline-none focus:ring-purple-300 dark:focus:ring-purple-800 font-medium rounded-md text-sm px-1 text-center">
             {{t('AI')}}
           </div>
@@ -133,7 +133,13 @@
 
   async function runTranslation() {
     isLoading.value = true;
-    const listOfIds = await getListOfIds();
+  
+    let listOfIds = []; 
+    if (props.checkboxes.length === 0) {
+      listOfIds = await getListOfIds();
+    } else {
+      listOfIds = props.checkboxes;
+    }
     try {
       const res = await callAdminForthApi({
         path: `/plugin/${props.meta.pluginInstanceId}/translate-selected-to-languages`,
