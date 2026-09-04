@@ -698,12 +698,34 @@ export default class I18nPlugin extends AdminForthPlugin {
 
     const limit = pLimit(30); 
     const enStringsTokenLengthCache: Record<string, any> = {};
+    let tokenCountingFailed = false;
+
+    // Counting tokens is only used to split requests into batches. Some completion
+    // adapters cannot provide a token count, so use a conservative estimate instead
+    // of preventing the translation job from being created.
+    const getTokenLength = async (value: string): Promise<number> => {
+      try {
+        const tokenLength = await this.options.completeAdapter.measureTokensCount(value);
+        if (!Number.isFinite(tokenLength) || tokenLength < 0) {
+          throw new Error(`Invalid token count: ${tokenLength}`);
+        }
+        return tokenLength;
+      } catch (error) {
+        if (!tokenCountingFailed) {
+          tokenCountingFailed = true;
+          afLogger.warn(`Could not count tokens for translation batches in plugin ${this.constructor.name}; using a character-based estimate instead: ${String(error)}`);
+        }
+        // English text normally uses about 4 characters per token. Three gives
+        // batches some extra headroom for JSON formatting and unusual characters.
+        return Math.max(1, Math.ceil(value.length / 3));
+      }
+    };
     
 
     const tokenLengthPerString = async ({ str, id }: { str: string; id: string }): Promise<void> => {
       const objectToPush = {
         en_string: str,
-        numOfTokens: await this.options.completeAdapter.measureTokensCount(`"${str}":"", \n`)
+        numOfTokens: await getTokenLength(`"${str}":"", \n`)
       };
       enStringsTokenLengthCache[id] = objectToPush;
     }
@@ -741,7 +763,7 @@ export default class I18nPlugin extends AdminForthPlugin {
     `;
 
     const failedToTranslate: IFailedTranslation[] = [];
-    const basePromptTokenLength = await this.options.completeAdapter.measureTokensCount(basePrompt);
+    const basePromptTokenLength = await getTokenLength(basePrompt);
     const allowedTokensAmountForFields = maxInputTokens - basePromptTokenLength;
     const stringsToTranslate: Record<string, { id: string; en_string: string; category: string }> = Object.fromEntries(strings.map(s => [s.id, s]));
     const generationTasksInitialData = []
