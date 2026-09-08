@@ -134,6 +134,13 @@ class AiTranslateError extends Error {
     this.name = 'AiTranslateError';
   }
 }
+class TranslateAccessError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TranslateAccessError';
+  }
+}
+
 export default class I18nPlugin extends AdminForthPlugin {
   options: PluginOptions;
   emailField: AdminForthResourceColumn;
@@ -864,6 +871,25 @@ export default class I18nPlugin extends AdminForthPlugin {
     > = {};
 
     const translations = await this.adminforth.resource(this.resourceConfig.resourceId).list(Filters.IN(this.primaryKeyFieldName, selectedIds));
+    const assertEditAllowed = async (translation?: any) => {
+      const { allowedActions } = await interpretResource(
+        adminUser,
+        this.resourceConfig,
+        { requestBody: { selectedIds, selectedLanguages }, newRecord: {}, oldRecord: translation, pk: translation?.[this.primaryKeyFieldName] },
+        ActionCheckSource.EditRequest,
+        this.adminforth,
+      );
+      const editAllowed = allowedActions[AllowedActionsEnum.edit] as boolean | string | undefined;
+      if (editAllowed !== true) {
+        throw new TranslateAccessError(typeof editAllowed === 'string' ? editAllowed : 'You are not allowed to edit records in this resource');
+      }
+    };
+    if (typeof this.resourceConfig.options?.allowedActions?.edit === 'function') {
+      const limit = pLimit(10);
+      await Promise.all(translations.map((translation) => limit(() => assertEditAllowed(translation))));
+    } else {
+      await assertEditAllowed();
+    }
     const languagesToProcess = selectedLanguages || this.options.supportedLanguages;
     for (const lang of languagesToProcess) {
       if (lang === 'en') {
@@ -1311,6 +1337,9 @@ export default class I18nPlugin extends AdminForthPlugin {
         if (recordId === undefined || recordId === null) {
           return { error: 'No recordId provided' };
         }
+        if (!Object.values(this.trFieldNames).includes(field)) {
+          return { error: `Field "${field}" is not a translation field` };
+        }
         const resource = this.adminforth.config.resources.find(r => r.resourceId === resourceId);
         // Create update object with just the single field
         const updateRecord = { [field]: value };
@@ -1340,6 +1369,19 @@ export default class I18nPlugin extends AdminForthPlugin {
             updateRecord[this.options.reviewedCheckboxesFieldName] = { ...oldValue };
           }
 
+          const { allowedActions } = await interpretResource(
+            adminUser,
+            resource,
+            { requestBody: body, newRecord: updateRecord, oldRecord, pk: recordId },
+            ActionCheckSource.EditRequest,
+            this.adminforth,
+          );
+          const editAllowed = allowedActions[AllowedActionsEnum.edit] as boolean | string | undefined;
+          if (editAllowed !== true) {
+            result = { error: typeof editAllowed === 'string' ? editAllowed : 'You are not allowed to edit records in this resource' };
+            return;
+          }
+
           result = await this.adminforth.updateResourceRecord({
             resource,
             recordId,
@@ -1354,8 +1396,9 @@ export default class I18nPlugin extends AdminForthPlugin {
         }
 
         const updatedRecord = await connector.getRecordByPrimaryKey(resource, recordId as string);
+        const visibleFields = [this.primaryKeyFieldName, ...Object.values(this.trFieldNames), this.options.reviewedCheckboxesFieldName].filter(Boolean);
 
-        return { record: updatedRecord };
+        return { record: Object.fromEntries(visibleFields.map((name) => [name, updatedRecord?.[name]])) };
       }
     });
 
@@ -1373,14 +1416,22 @@ export default class I18nPlugin extends AdminForthPlugin {
           return { ok: false, error: 'No records selected' };
         }
 
-        const jobId = await this.bulkTranslate({
-          selectedIds: selectedIds as string[],
-          selectedLanguages: selectedLanguages as SupportedLanguage[] | undefined,
-          adminUser,
-        });
+        let jobId: string;
+        try {
+          jobId = await this.bulkTranslate({
+            selectedIds: selectedIds as string[],
+            selectedLanguages: selectedLanguages as SupportedLanguage[] | undefined,
+            adminUser,
+          });
+        } catch (e) {
+          if (e instanceof TranslateAccessError) {
+            return { ok: false, error: e.message };
+          }
+          throw e;
+        }
 
-        return { 
-          ok: true, 
+        return {
+          ok: true,
           jobId: jobId,
         };
       }
