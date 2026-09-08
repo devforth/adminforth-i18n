@@ -1,4 +1,4 @@
-import AdminForth, { AdminForthPlugin, Filters, suggestIfTypo, AdminForthDataTypes, RAMLock, filtersTools, AdminForthFilterOperators } from "adminforth";
+import AdminForth, { AdminForthPlugin, Filters, suggestIfTypo, AdminForthDataTypes, RAMLock, filtersTools, AdminForthFilterOperators, rejectApiRawFilters, interpretResource, ActionCheckSource, AllowedActionsEnum } from "adminforth";
 import type { IAdminForth, IHttpServer, AdminForthComponentDeclaration, AdminForthResourceColumn, AdminForthResource, BeforeLoginConfirmationFunction, AdminForthConfigMenuItem, AdminUser } from "adminforth";
 import type { PluginOptions, SupportedLanguage } from './types.js';
 import { z } from "zod";
@@ -1392,6 +1392,24 @@ export default class I18nPlugin extends AdminForthPlugin {
       request_schema: getFilteredIdsBodySchema,
       handler: async ({ body, adminUser, headers, query, cookies, requestUrl, response }) => {
         const resource = this.resourceConfig;
+
+        // before the permission rules and the hooks: they may add raw SQL server-side, the client must not
+        const rawFilterError = rejectApiRawFilters(body.filters);
+        if (rawFilterError) {
+          return rawFilterError;
+        }
+
+        const { allowedActions } = await interpretResource(
+          adminUser,
+          resource,
+          { requestBody: body, pk: undefined },
+          ActionCheckSource.ListRequest,
+          this.adminforth,
+        );
+        const listAllowed = allowedActions[AllowedActionsEnum.list] as boolean | string | undefined;
+        if (listAllowed !== true) {
+          return { error: typeof listAllowed === 'string' ? listAllowed : 'You are not allowed to list records in this resource' };
+        }
 
         for (const hook of resource.hooks?.list?.beforeDatasourceRequest || []) {
           const filterTools = filtersTools.get(body);

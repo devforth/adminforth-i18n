@@ -134,9 +134,13 @@
   async function runTranslation() {
     isLoading.value = true;
   
-    let listOfIds = []; 
+    let listOfIds = [];
     if (props.checkboxes.length === 0) {
       listOfIds = await getListOfIds();
+      if (listOfIds === null) {
+        isLoading.value = false;
+        return;
+      }
     } else {
       listOfIds = props.checkboxes;
     }
@@ -160,7 +164,7 @@
             jobInfoStore.openJobInfoPopup(jobId);
           }
         } else {
-          adminforth.alert({ message: res.errorMessage || t('Failed to translate selected items. Please, try again.'), variant: 'danger' });
+          adminforth.alert({ message: res.error || t('Failed to translate selected items. Please, try again.'), variant: 'danger' });
         }
     } catch (e) {
       console.error('Failed to translate selected items:', e);
@@ -185,7 +189,8 @@
     }
     if (!res?.ok || !res?.recordIds) {
       console.error('Failed to get records for filtered selector, response error:', res);
-      return [];
+      adminforth.alert({ message: res?.error || t('Failed to translate selected items. Please, try again.'), variant: 'danger' });
+      return null;
     }
     return res.recordIds;
   }
