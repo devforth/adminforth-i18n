@@ -1396,7 +1396,26 @@ export default class I18nPlugin extends AdminForthPlugin {
         }
 
         const updatedRecord = await connector.getRecordByPrimaryKey(resource, recordId as string);
-        const visibleFields = [this.primaryKeyFieldName, ...Object.values(this.trFieldNames), this.options.reviewedCheckboxesFieldName].filter(Boolean);
+        // core deletes backendOnly and undeclared columns from every record it returns; do the same here
+        const columnCtx = {
+          adminUser,
+          resource,
+          meta: { requestBody: body, pk: recordId },
+          source: ActionCheckSource.EditLoadRequest,
+          adminforth: this.adminforth,
+        };
+        const candidates = [this.primaryKeyFieldName, ...Object.values(this.trFieldNames), this.options.reviewedCheckboxesFieldName].filter(Boolean);
+        const visibleFields: string[] = [];
+        for (const name of candidates) {
+          const column = resource.columns.find((c) => c.name === name);
+          if (!column) {
+            continue;
+          }
+          const backendOnly = typeof column.backendOnly === 'function' ? await column.backendOnly(columnCtx) : column.backendOnly;
+          if (!backendOnly) {
+            visibleFields.push(name as string);
+          }
+        }
 
         return { record: Object.fromEntries(visibleFields.map((name) => [name, updatedRecord?.[name]])) };
       }
