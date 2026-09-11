@@ -1,4 +1,4 @@
-import AdminForth, { AdminForthPlugin, Filters, suggestIfTypo, AdminForthDataTypes, RAMLock, filtersTools, AdminForthFilterOperators } from "adminforth";
+import AdminForth, { AdminForthPlugin, Filters, suggestIfTypo, AdminForthDataTypes, RAMLock, filtersTools, AdminForthFilterOperators, rejectApiRawFilters, interpretResource, ActionCheckSource, AllowedActionsEnum } from "adminforth";
 import type { IAdminForth, IHttpServer, AdminForthComponentDeclaration, AdminForthResourceColumn, AdminForthResource, BeforeLoginConfirmationFunction, AdminForthConfigMenuItem, AdminUser } from "adminforth";
 import type { PluginOptions, SupportedLanguage } from './types.js';
 import { z } from "zod";
@@ -134,6 +134,13 @@ class AiTranslateError extends Error {
     this.name = 'AiTranslateError';
   }
 }
+class TranslateAccessError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TranslateAccessError';
+  }
+}
+
 export default class I18nPlugin extends AdminForthPlugin {
   options: PluginOptions;
   emailField: AdminForthResourceColumn;
@@ -864,6 +871,25 @@ export default class I18nPlugin extends AdminForthPlugin {
     > = {};
 
     const translations = await this.adminforth.resource(this.resourceConfig.resourceId).list(Filters.IN(this.primaryKeyFieldName, selectedIds));
+    const assertEditAllowed = async (translation?: any) => {
+      const { allowedActions } = await interpretResource(
+        adminUser,
+        this.resourceConfig,
+        { requestBody: { selectedIds, selectedLanguages }, newRecord: {}, oldRecord: translation, pk: translation?.[this.primaryKeyFieldName] },
+        ActionCheckSource.EditRequest,
+        this.adminforth,
+      );
+      const editAllowed = allowedActions[AllowedActionsEnum.edit] as boolean | string | undefined;
+      if (editAllowed !== true) {
+        throw new TranslateAccessError(typeof editAllowed === 'string' ? editAllowed : 'You are not allowed to edit records in this resource');
+      }
+    };
+    if (typeof this.resourceConfig.options?.allowedActions?.edit === 'function') {
+      const limit = pLimit(10);
+      await Promise.all(translations.map((translation) => limit(() => assertEditAllowed(translation))));
+    } else {
+      await assertEditAllowed();
+    }
     const languagesToProcess = selectedLanguages || this.options.supportedLanguages;
     for (const lang of languagesToProcess) {
       if (lang === 'en') {
@@ -1311,6 +1337,9 @@ export default class I18nPlugin extends AdminForthPlugin {
         if (recordId === undefined || recordId === null) {
           return { error: 'No recordId provided' };
         }
+        if (!Object.values(this.trFieldNames).includes(field)) {
+          return { error: `Field "${field}" is not a translation field` };
+        }
         const resource = this.adminforth.config.resources.find(r => r.resourceId === resourceId);
         // Create update object with just the single field
         const updateRecord = { [field]: value };
@@ -1340,6 +1369,19 @@ export default class I18nPlugin extends AdminForthPlugin {
             updateRecord[this.options.reviewedCheckboxesFieldName] = { ...oldValue };
           }
 
+          const { allowedActions } = await interpretResource(
+            adminUser,
+            resource,
+            { requestBody: body, newRecord: updateRecord, oldRecord, pk: recordId },
+            ActionCheckSource.EditRequest,
+            this.adminforth,
+          );
+          const editAllowed = allowedActions[AllowedActionsEnum.edit] as boolean | string | undefined;
+          if (editAllowed !== true) {
+            result = { error: typeof editAllowed === 'string' ? editAllowed : 'You are not allowed to edit records in this resource' };
+            return;
+          }
+
           result = await this.adminforth.updateResourceRecord({
             resource,
             recordId,
@@ -1354,8 +1396,28 @@ export default class I18nPlugin extends AdminForthPlugin {
         }
 
         const updatedRecord = await connector.getRecordByPrimaryKey(resource, recordId as string);
+        // core deletes backendOnly and undeclared columns from every record it returns; do the same here
+        const columnCtx = {
+          adminUser,
+          resource,
+          meta: { requestBody: body, pk: recordId },
+          source: ActionCheckSource.EditLoadRequest,
+          adminforth: this.adminforth,
+        };
+        const candidates = [this.primaryKeyFieldName, ...Object.values(this.trFieldNames), this.options.reviewedCheckboxesFieldName].filter(Boolean);
+        const visibleFields: string[] = [];
+        for (const name of candidates) {
+          const column = resource.columns.find((c) => c.name === name);
+          if (!column) {
+            continue;
+          }
+          const backendOnly = typeof column.backendOnly === 'function' ? await column.backendOnly(columnCtx) : column.backendOnly;
+          if (!backendOnly) {
+            visibleFields.push(name as string);
+          }
+        }
 
-        return { record: updatedRecord };
+        return { record: Object.fromEntries(visibleFields.map((name) => [name, updatedRecord?.[name]])) };
       }
     });
 
@@ -1373,14 +1435,22 @@ export default class I18nPlugin extends AdminForthPlugin {
           return { ok: false, error: 'No records selected' };
         }
 
-        const jobId = await this.bulkTranslate({
-          selectedIds: selectedIds as string[],
-          selectedLanguages: selectedLanguages as SupportedLanguage[] | undefined,
-          adminUser,
-        });
+        let jobId: string;
+        try {
+          jobId = await this.bulkTranslate({
+            selectedIds: selectedIds as string[],
+            selectedLanguages: selectedLanguages as SupportedLanguage[] | undefined,
+            adminUser,
+          });
+        } catch (e) {
+          if (e instanceof TranslateAccessError) {
+            return { ok: false, error: e.message };
+          }
+          throw e;
+        }
 
-        return { 
-          ok: true, 
+        return {
+          ok: true,
           jobId: jobId,
         };
       }
@@ -1392,6 +1462,24 @@ export default class I18nPlugin extends AdminForthPlugin {
       request_schema: getFilteredIdsBodySchema,
       handler: async ({ body, adminUser, headers, query, cookies, requestUrl, response }) => {
         const resource = this.resourceConfig;
+
+        // before the permission rules and the hooks: they may add raw SQL server-side, the client must not
+        const rawFilterError = rejectApiRawFilters(body.filters);
+        if (rawFilterError) {
+          return rawFilterError;
+        }
+
+        const { allowedActions } = await interpretResource(
+          adminUser,
+          resource,
+          { requestBody: body, pk: undefined },
+          ActionCheckSource.ListRequest,
+          this.adminforth,
+        );
+        const listAllowed = allowedActions[AllowedActionsEnum.list] as boolean | string | undefined;
+        if (listAllowed !== true) {
+          return { error: typeof listAllowed === 'string' ? listAllowed : 'You are not allowed to list records in this resource' };
+        }
 
         for (const hook of resource.hooks?.list?.beforeDatasourceRequest || []) {
           const filterTools = filtersTools.get(body);
