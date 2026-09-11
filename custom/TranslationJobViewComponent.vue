@@ -82,6 +82,7 @@ const props = defineProps<{
   meta: any;
   getJobTasks: (limit?: number, offset?: number, fieldsToReturn?: string[]) => Promise<
   {state: Record<string, any>, status: string}[]>;
+  tasksStorageLost?: boolean;
   job: {
     id: string;
     name: string;
@@ -114,6 +115,11 @@ async function loadPage(targetPage: number) {
         }
       } catch (error) {
         console.error('Failed to fetch translation tasks, retrying...', error);
+      }
+      // the task storage of the job was deleted, tasks will never come back, so retrying only keeps the
+      // spinner on screen for nothing
+      if (props.tasksStorageLost) {
+        break;
       }
       if (retry < retries - 1) {
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
