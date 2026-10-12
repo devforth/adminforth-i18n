@@ -8,10 +8,29 @@ type Alpha2Code = keyof typeof iso31661Alpha2ToAlpha3;
 type Bcp47LanguageTag = `${LanguageCode}-${Alpha2Code}`;
 export type SupportedLanguage = LanguageCode | Bcp47LanguageTag;
 
-export interface PluginOptions extends PluginsCommonOptions {
+/**
+ * Options shared by all i18n plugins built on top of I18nBase
+ */
+export interface I18nBaseOptions extends PluginsCommonOptions {
 
   /* List of language codes which you want to support. Can be either short ISO 639-1 language codes or/and BCP47 tags */
   supportedLanguages: SupportedLanguage[];
+
+  /**
+   * Language selector on login page order
+   */
+  loginPageLanguageSelectorOrder?: number;
+
+  /**
+   * Primary language for the application. This is the default language shown to users.
+   * English is always used as the source language for translations, even if primaryLanguage is different.
+   * When a translation is missing for the primaryLanguage, English will be shown as fallback.
+   * Defaults to 'en' if not specified.
+   */
+  primaryLanguage?: SupportedLanguage;
+}
+
+export interface PluginOptions extends I18nBaseOptions {
 
   /**
    * Each translation string will be stored in a separate field, you can remap it to existing columns  using this option
@@ -25,11 +44,6 @@ export interface PluginOptions extends PluginsCommonOptions {
    * We recommend to put index on this column
    */
   categoryFieldName: string;
-
-  /**
-   * Language selector on login page order
-   */
-  loginPageLanguageSelectorOrder?: number;
 
   /**
    * Optional source field to store e.g. file name where it first was captured
@@ -60,14 +74,6 @@ export interface PluginOptions extends PluginsCommonOptions {
    * it should be a JSON field (underlyng database type should be TEXT or JSON)
    */
   reviewedCheckboxesFieldName?: string;
-
-  /**
-   * Primary language for the application. This is the default language shown to users.
-   * English is always used as the source language for translations, even if primaryLanguage is different.
-   * When a translation is missing for the primaryLanguage, English will be shown as fallback.
-   * Defaults to 'en' if not specified.
-   */
-  primaryLanguage?: SupportedLanguage;
 
   /**
     *  Ask translator to treat some code from supportedLanguages as exact BCP47 tag. Read docs for details.

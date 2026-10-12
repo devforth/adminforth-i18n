@@ -1,6 +1,7 @@
-import AdminForth, { AdminForthPlugin, Filters, suggestIfTypo, AdminForthDataTypes, RAMLock, filtersTools, AdminForthFilterOperators } from "adminforth";
+import AdminForth, { Filters, suggestIfTypo, AdminForthDataTypes, RAMLock, filtersTools, AdminForthFilterOperators } from "adminforth";
 import type { IAdminForth, IHttpServer, AdminForthComponentDeclaration, AdminForthResourceColumn, AdminForthResource, BeforeLoginConfirmationFunction, AdminForthConfigMenuItem, AdminUser } from "adminforth";
 import type { PluginOptions, SupportedLanguage } from './types.js';
+import { I18nBase, getPrimaryLanguageCode, requiresSlavicPlurals, SLAVIC_PLURAL_EXAMPLES } from './base.js';
 import { z } from "zod";
 import iso6391 from 'iso-639-1';
 
@@ -25,69 +26,12 @@ import path from 'path';
 import fs from 'fs-extra';
 import chokidar from 'chokidar';
 import  { AsyncQueue } from '@sapphire/async-queue';
-import getFlagEmoji from 'country-flag-svg';
 import { parse } from 'bcp-47';
 import pLimit from 'p-limit';
 import { randomUUID } from 'crypto';
 import { afLogger } from "adminforth";
 
 const processFrontendMessagesQueue = new AsyncQueue();
-
-const SLAVIC_PLURAL_EXAMPLES = {
-  uk: 'яблук | Яблуко | Яблука | Яблук', // zero | singular | 2-4 | 5+
-  bg: 'ябълки | ябълка | ябълки | ябълки', // zero | singular | 2-4 | 5+
-  cs: 'jablek | jablko | jablka | jablek', // zero | singular | 2-4 | 5+
-  hr: 'jabuka | jabuka | jabuke | jabuka', // zero | singular | 2-4 | 5+
-  mk: 'јаболка | јаболко | јаболка | јаболка', // zero | singular | 2-4 | 5+
-  pl: 'jabłek | jabłko | jabłka | jabłek', // zero | singular | 2-4 | 5+
-  sk: 'jabĺk | jablko | jablká | jabĺk', // zero | singular | 2-4 | 5+
-  sl: 'jabolk | jabolko | jabolka | jabolk', // zero | singular | 2-4 | 5+
-  sr: 'јабука | јабука | јабуке | јабука', // zero | singular | 2-4 | 5+
-  be: 'яблыкаў | яблык | яблыкі | яблыкаў', // zero | singular | 2-4 | 5+
-  ru: 'яблок | яблоко | яблока | яблок', // zero | singular | 2-4 | 5+
-};
-
-const countryISO31661ByLangISO6391 = {
-  en: 'us', // English → United States
-  zh: 'cn', // Chinese → China
-  hi: 'in', // Hindi → India
-  ar: 'sa', // Arabic → Saudi Arabia
-  ko: 'kr', // Korean → South Korea
-  ja: 'jp', // Japanese → Japan
-  uk: 'ua', // Ukrainian → Ukraine
-  ur: 'pk', // Urdu → Pakistan
-  sr: 'rs', // Serbian → Serbia
-  da: 'dk' // Danish → Denmark
-};
-
-function getCountryCodeFromLangCode(lang: SupportedLanguage) {
-  const [langCode, region] = String(lang).split('-');
-  if (region && /^[A-Z]{2}$/.test(region)) {
-    return region.toLowerCase();
-  }
-  return countryISO31661ByLangISO6391[langCode] || langCode;
-}
-
-function getPrimaryLanguageCode(langCode: SupportedLanguage): string {
-  return String(langCode).split('-')[0];
-}
-
-function isValidSupportedLanguageTag(langCode: SupportedLanguage): boolean {
-  try {
-    const schema = parse(String(langCode), 
-      { 
-        normalize: true, 
-        warning: (reason, code, offset) => {
-          console.warn(`Warning in validating language tag ${langCode}: reason=${reason}, code=${code}, offset=${offset}`);
-        }
-      }
-    );
-    const isValid = schema.language.length === 2;
-    return isValid;
-  } catch (e) {
-    return false;
-  }
-}
 
 interface IFailedTranslation {
   lang: SupportedLanguage;
@@ -134,8 +78,7 @@ class AiTranslateError extends Error {
     this.name = 'AiTranslateError';
   }
 }
-export default class I18nPlugin extends AdminForthPlugin {
-  options: PluginOptions;
+export default class I18nPlugin extends I18nBase<PluginOptions> {
   emailField: AdminForthResourceColumn;
   passwordField: AdminForthResourceColumn;
   authResource: AdminForthResource;
@@ -146,20 +89,15 @@ export default class I18nPlugin extends AdminForthPlugin {
   primaryKeyFieldName: string;
   menuItemWithBadgeId: string;
 
-  adminforth: IAdminForth;
-
   externalAppOnly: boolean;
 
   // sorted by name list of all supported languages, without en e.g. 'al|ro|uk'
   fullCompleatedFieldValue: string;
-  primaryLanguage: SupportedLanguage;
 
   constructor(options: PluginOptions) {
-    super(options, import.meta.url);
-    this.options = options;
+    super(options);
     this.cache = new CachingAdapterMemory();
     this.trFieldNames = {};
-    this.primaryLanguage = options.primaryLanguage || 'en';
   }
 
   async computeCompletedFieldValue(record: any) {
@@ -200,13 +138,6 @@ export default class I18nPlugin extends AdminForthPlugin {
         file: this.componentPath('TranslationJobViewComponent.vue')
       }
     );
-
-    // validate each supported language: ISO 639-1 or BCP-47 with region (e.g., en-GB)
-    this.options.supportedLanguages.forEach((lang) => {
-      if (!isValidSupportedLanguageTag(lang)) {
-        throw new Error(`Invalid language code ${lang}. Use ISO 639-1 (e.g., 'en') or BCP-47 with region (e.g., 'en-GB').`);
-      }
-    });
 
     if (this.options.translateLangAsBCP47Code) {
       for (const [lang, bcp47] of Object.entries(this.options.translateLangAsBCP47Code)) {
@@ -341,35 +272,9 @@ export default class I18nPlugin extends AdminForthPlugin {
       });
     }
 
-    const compMeta = { 
-      brandSlug: adminforth.config.customization.brandNameSlug,
-      pluginInstanceId: this.pluginInstanceId,
-      primaryLanguage: this.primaryLanguage,
-      afOrder: this.options.loginPageLanguageSelectorOrder || 0,
-      supportedLanguages: this.options.supportedLanguages.map(lang => (
-        {
-          code: lang,
-          // lang name on on language native name
-          name: iso6391.getNativeName(getPrimaryLanguageCode(lang)),
-        }
-      ))
-    };
     // add underLogin component
     if (!this.externalAppOnly) {
-      (adminforth.config.customization.loginPageInjections.underLoginButton as Array<any>).push({ 
-        file: this.componentPath('LanguageUnderLogin.vue'),
-        meta: compMeta
-      });
-
-      (adminforth.config.customization.globalInjections.userMenu).push({
-        file: this.componentPath('LanguageInUserMenu.vue'),
-        meta: compMeta
-      });
-
-      adminforth.config.customization.globalInjections.everyPageBottom.push({
-        file: this.componentPath('LanguageEveryPageLoader.vue'),
-        meta: compMeta
-      });
+      this.injectLanguageSelectors(adminforth);
     }
 
     // disable create allowedActions for translations
@@ -746,14 +651,14 @@ export default class I18nPlugin extends AdminForthPlugin {
     const lang = langIsoCode;
     const primaryLang = getPrimaryLanguageCode(lang);
     const langName = iso6391.getName(primaryLang);
-    const requestSlavicPlurals = Object.keys(SLAVIC_PLURAL_EXAMPLES).includes(primaryLang) && plurals;
+    const requestSlavicPlurals = requiresSlavicPlurals(lang) && plurals;
     const region = langSchema.region;
     const basePrompt = `
       I need to translate strings in JSON to ${langName} language ${replacedLanguageCodeForTranslations || lang.length > 2 ? `BCP-47 code ${langCode}` : `ISO 639-1 code ${langIsoCode}`} from English for my web app.
 
       
       ${region ? `Use the regional conventions for ${langCode} (region ${region}), including spelling, punctuation, and formatting.` : ''}
-      ${requestSlavicPlurals ? `You should provide 4 slavic forms (in format "zero count | singular count | 2-4 | 5+") e.g. "apple | apples" should become "${SLAVIC_PLURAL_EXAMPLES[lang]}"` : ''}
+      ${requestSlavicPlurals ? `You should provide 4 slavic forms (in format "zero count | singular count | 2-4 | 5+") e.g. "apple | apples" should become "${SLAVIC_PLURAL_EXAMPLES[primaryLang]}"` : ''}
       JSON keys are internal identifiers. Keep keys as is and write translations into values. If values have variables (in curly brackets), then translated strings should have them as well (variables itself should not be translated). Here are the strings:
       \`\`\`json
       {
@@ -1102,13 +1007,7 @@ export default class I18nPlugin extends AdminForthPlugin {
         }
         // console.log('🪲tr', msg, category, lang);
 
-      // if lang is not supported, fallback to primaryLanguage, then to english
-      if (!this.options.supportedLanguages.includes(lang as SupportedLanguage)) {
-        lang = this.primaryLanguage; // fallback to primary language first
-        if (!this.options.supportedLanguages.includes(lang as SupportedLanguage)) {
-          lang = 'en'; // final fallback to english
-        }
-      }
+        lang = this.resolveLanguage(lang);
 
         let result;
         // try to get translation from cache
@@ -1143,57 +1042,9 @@ export default class I18nPlugin extends AdminForthPlugin {
           // cache so even if key does not exist, we will not hit database
           await this.cache.set(cacheKey, result);
         }
-        // if msg has '|' in it, then we need to aplly pluralization
-        if (msg.includes('|') && pluralizationNumber !== undefined) {
-          result = this.applyPluralization(result, pluralizationNumber, lang);
-        }
-
-        if (params) {
-          for (const [key, value] of Object.entries(params)) {
-            if (result) {
-              result = result.replace(`{${key}}`, value);
-            }
-          }
-        }
-        return result;
+        return this.formatTranslation(msg, result, lang, params, pluralizationNumber);
       }
     }
-  }
-
-  applyPluralization(str: string, number: number, lang: string): string {
-    const choices = str.split('|');
-    const choicesLength = choices.length;
-
-    if (choicesLength > 2) {
-      // this is slavic pluralization
-      return choices[this.slavicPluralRule(number, choicesLength)];
-    } else {
-      return number === 1 ? choices[0] : choices[1];
-    }
-  }
-  
-    // taken from here https://vue-i18n.intlify.dev/guide/essentials/pluralization.html#custom-pluralization
-  slavicPluralRule(choice, choicesLength) {
-    if (choice === 0) {
-      return 0
-    }
-
-    const teen = choice > 10 && choice < 20
-    const endsWithOne = choice % 10 === 1
-
-    if (!teen && endsWithOne) {
-      return 1
-    }
-    if (!teen && choice % 10 >= 2 && choice % 10 <= 4) {
-      return 2
-    }
-
-    return choicesLength < 4 ? 2 : 3
-  }
-  instanceUniqueRepresentation(pluginOptions: any) : string {
-    // optional method to return unique string representation of plugin instance. 
-    // Needed if plugin can have multiple instances on one resource 
-    return `single`;
   }
 
   async getCategoryTranslations(category: string, lang: string): Promise<Record<string, string>> {
@@ -1211,30 +1062,6 @@ export default class I18nPlugin extends AdminForthPlugin {
     }
     await this.cache.set(cacheKey, translations);
     return translations;
-  }
-
-  async languagesList(): Promise<{
-    code: SupportedLanguage;
-    nameOnNative: string;
-    nameEnglish: string;
-    emojiFlag: string;
-    svgFlagB64: string;
-  }[]> {
-    return Promise.all(this.options.supportedLanguages.map(async (lang) => {
-      const flagEmoji =
-        typeof getFlagEmoji === 'function'
-          ? getFlagEmoji
-          : getFlagEmoji.default;
-      
-
-      return {
-        code: lang,
-        nameOnNative: iso6391.getNativeName(getPrimaryLanguageCode(lang)),
-        nameEnglish: iso6391.getName(getPrimaryLanguageCode(lang)),
-        emojiFlag: getCountryCodeFromLangCode(lang).toUpperCase().replace(/./g, char => String.fromCodePoint(char.charCodeAt(0) + 127397)),
-        svgFlagB64: await flagEmoji(getCountryCodeFromLangCode(lang)),
-      };
-    }));
   }
 
   async feedCategoryTranslations(messages: {
@@ -1279,19 +1106,7 @@ export default class I18nPlugin extends AdminForthPlugin {
 
 
   setupEndpoints(server: IHttpServer) {
-    server.endpoint({
-      method: 'GET',
-      path: `/plugin/${this.pluginInstanceId}/frontend_messages`,
-      noAuth: true,
-      handler: async ({ query }) => {
-        const lang = query.lang;
-        
-        // form map of translations
-        const translations = await this.getCategoryTranslations('frontend', lang);
-        return translations;
-
-      }
-    });
+    super.setupEndpoints(server);
 
     const lock = new RAMLock();
 
@@ -1452,3 +1267,6 @@ export default class I18nPlugin extends AdminForthPlugin {
   }
 
 }
+
+export { I18nBase, getCountryCodeFromLangCode, getPrimaryLanguageCode, isValidSupportedLanguageTag, requiresSlavicPlurals, SOURCE_LANGUAGE, PLURAL_SEPARATOR, SLAVIC_PLURAL_FORMS } from './base.js';
+export type { I18nBaseOptions, SupportedLanguage } from './types.js';
