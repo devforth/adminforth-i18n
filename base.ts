@@ -11,19 +11,21 @@ const REGION_CODE_RE = /^[A-Z]{2}$/;
 export const SOURCE_LANGUAGE = 'en';
 export const PLURAL_SEPARATOR = '|';
 export const SLAVIC_PLURAL_FORMS = 4;
+export const SLAVIC_PLURAL_FORMS_HINT = 'zero | singular | 2-4 | 5+';
 
+// forms in SLAVIC_PLURAL_FORMS_HINT order
 export const SLAVIC_PLURAL_EXAMPLES = {
-  uk: 'яблук | яблуко | яблука | яблук', // zero | singular | 2-4 | 5+
-  bg: 'ябълки | ябълка | ябълки | ябълки', // zero | singular | 2-4 | 5+
-  cs: 'jablek | jablko | jablka | jablek', // zero | singular | 2-4 | 5+
-  hr: 'jabuka | jabuka | jabuke | jabuka', // zero | singular | 2-4 | 5+
-  mk: 'јаболка | јаболко | јаболка | јаболка', // zero | singular | 2-4 | 5+
-  pl: 'jabłek | jabłko | jabłka | jabłek', // zero | singular | 2-4 | 5+
-  sk: 'jabĺk | jablko | jablká | jabĺk', // zero | singular | 2-4 | 5+
-  sl: 'jabolk | jabolko | jabolka | jabolk', // zero | singular | 2-4 | 5+
-  sr: 'јабука | јабука | јабуке | јабука', // zero | singular | 2-4 | 5+
-  be: 'яблыкаў | яблык | яблыкі | яблыкаў', // zero | singular | 2-4 | 5+
-  ru: 'яблок | яблоко | яблока | яблок', // zero | singular | 2-4 | 5+
+  uk: 'яблук | яблуко | яблука | яблук',
+  bg: 'ябълки | ябълка | ябълки | ябълки',
+  cs: 'jablek | jablko | jablka | jablek',
+  hr: 'jabuka | jabuka | jabuke | jabuka',
+  mk: 'јаболка | јаболко | јаболка | јаболка',
+  pl: 'jabłek | jabłko | jabłka | jabłek',
+  sk: 'jabĺk | jablko | jablká | jabĺk',
+  sl: 'jabolk | jabolko | jabolka | jabolk',
+  sr: 'јабука | јабука | јабуке | јабука',
+  be: 'яблыкаў | яблык | яблыкі | яблыкаў',
+  ru: 'яблок | яблоко | яблока | яблок',
 };
 
 const countryISO31661ByLangISO6391 = {
@@ -36,7 +38,142 @@ const countryISO31661ByLangISO6391 = {
   uk: 'ua', // Ukrainian → Ukraine
   ur: 'pk', // Urdu → Pakistan
   sr: 'rs', // Serbian → Serbia
-  da: 'dk' // Danish → Denmark
+  da: 'dk', // Danish → Denmark
+  sv: 'se', // Swedish → Sweden
+  he: 'il', // Hebrew → Israel
+  el: 'gr', // Greek → Greece
+  cs: 'cz', // Czech → Czech Republic
+  vi: 'vn', // Vietnamese → Vietnam
+  aa: 'et', // Afar → Ethiopia
+  ab: 'ge', // Abkhaz → Georgia
+  ae: 'ir', // Avestan → Iran
+  af: 'za', // Afrikaans → South Africa
+  ak: 'gh', // Akan → Ghana
+  am: 'et', // Amharic → Ethiopia
+  an: 'es', // Aragonese → Spain
+  as: 'in', // Assamese → India
+  av: 'ru', // Avaric → Russia
+  ay: 'bo', // Aymara → Bolivia
+  ba: 'ru', // Bashkir → Russia
+  be: 'by', // Belarusian → Belarus
+  bi: 'vu', // Bislama → Vanuatu
+  bm: 'ml', // Bambara → Mali
+  bn: 'bd', // Bengali → Bangladesh
+  bo: 'cn', // Tibetan → China
+  br: 'fr', // Breton → France
+  bs: 'ba', // Bosnian → Bosnia & Herzegovina
+  ca: 'es', // Catalan → Spain
+  ce: 'ru', // Chechen → Russia
+  ch: 'gu', // Chamorro → Guam
+  co: 'fr', // Corsican → France
+  cr: 'ca', // Cree → Canada
+  cu: 'ru', // Old Church Slavonic → Russia
+  cv: 'ru', // Chuvash → Russia
+  cy: 'gb', // Welsh → United Kingdom
+  dv: 'mv', // Divehi → Maldives
+  dz: 'bt', // Dzongkha → Bhutan
+  ee: 'gh', // Ewe → Ghana
+  et: 'ee', // Estonian → Estonia
+  eu: 'es', // Basque → Spain
+  fa: 'ir', // Persian → Iran
+  ff: 'sn', // Fula → Senegal
+  fy: 'nl', // Western Frisian → Netherlands
+  ga: 'ie', // Irish → Ireland
+  gd: 'gb', // Scottish Gaelic → United Kingdom
+  gl: 'es', // Galician → Spain
+  gn: 'py', // Guaraní → Paraguay
+  gu: 'in', // Gujarati → India
+  gv: 'im', // Manx → Isle of Man
+  ha: 'ng', // Hausa → Nigeria
+  ho: 'pg', // Hiri Motu → Papua New Guinea
+  hy: 'am', // Armenian → Armenia
+  hz: 'na', // Herero → Namibia
+  ie: 'ee', // Interlingue → Estonia
+  ig: 'ng', // Igbo → Nigeria
+  ii: 'cn', // Nuosu → China
+  ik: 'us', // Inupiaq → United States
+  iu: 'ca', // Inuktitut → Canada
+  jv: 'id', // Javanese → Indonesia
+  ka: 'ge', // Georgian → Georgia
+  kg: 'cd', // Kongo → Congo - Kinshasa
+  ki: 'ke', // Kikuyu → Kenya
+  kj: 'na', // Kwanyama → Namibia
+  kk: 'kz', // Kazakh → Kazakhstan
+  kl: 'gl', // Kalaallisut → Greenland
+  km: 'kh', // Khmer → Cambodia
+  kn: 'in', // Kannada → India
+  kr: 'ng', // Kanuri → Nigeria
+  ks: 'in', // Kashmiri → India
+  ku: 'tr', // Kurdish → Türkiye
+  kv: 'ru', // Komi → Russia
+  kw: 'gb', // Cornish → United Kingdom
+  ky: 'kg', // Kyrgyz → Kyrgyzstan
+  la: 'va', // Latin → Vatican City
+  lb: 'lu', // Luxembourgish → Luxembourg
+  lg: 'ug', // Ganda → Uganda
+  li: 'nl', // Limburgish → Netherlands
+  ln: 'cd', // Lingala → Congo - Kinshasa
+  lo: 'la', // Lao → Laos
+  lu: 'cd', // Luba-Katanga → Congo - Kinshasa
+  mi: 'nz', // Māori → New Zealand
+  ml: 'in', // Malayalam → India
+  mr: 'in', // Marathi → India
+  ms: 'my', // Malay → Malaysia
+  my: 'mm', // Burmese → Myanmar (Burma)
+  na: 'nr', // Nauru → Nauru
+  nb: 'no', // Norwegian Bokmål → Norway
+  nd: 'zw', // Northern Ndebele → Zimbabwe
+  ne: 'np', // Nepali → Nepal
+  ng: 'na', // Ndonga → Namibia
+  nn: 'no', // Norwegian Nynorsk → Norway
+  nr: 'za', // Southern Ndebele → South Africa
+  nv: 'us', // Navajo → United States
+  ny: 'mw', // Chichewa → Malawi
+  oc: 'fr', // Occitan → France
+  oj: 'ca', // Ojibwe → Canada
+  om: 'et', // Oromo → Ethiopia
+  or: 'in', // Oriya → India
+  os: 'ge', // Ossetian → Georgia
+  pa: 'in', // Panjabi → India
+  pi: 'gb', // Pāli → United Kingdom
+  ps: 'af', // Pashto → Afghanistan
+  qu: 'pe', // Quechua → Peru
+  rm: 'ch', // Romansh → Switzerland
+  rn: 'bi', // Kirundi → Burundi
+  sa: 'in', // Sanskrit → India
+  sc: 'it', // Sardinian → Italy
+  sd: 'pk', // Sindhi → Pakistan
+  se: 'no', // Northern Sami → Norway
+  sg: 'cf', // Sango → Central African Republic
+  si: 'lk', // Sinhala → Sri Lanka
+  sl: 'si', // Slovenian → Slovenia
+  sm: 'ws', // Samoan → Samoa
+  sn: 'zw', // Shona → Zimbabwe
+  sq: 'al', // Albanian → Albania
+  ss: 'za', // Swati → South Africa
+  st: 'za', // Southern Sotho → South Africa
+  su: 'id', // Sundanese → Indonesia
+  sw: 'tz', // Swahili → Tanzania
+  ta: 'in', // Tamil → India
+  te: 'in', // Telugu → India
+  tg: 'tj', // Tajik → Tajikistan
+  ti: 'et', // Tigrinya → Ethiopia
+  tk: 'tm', // Turkmen → Turkmenistan
+  tl: 'ph', // Tagalog → Philippines
+  tn: 'za', // Tswana → South Africa
+  ts: 'za', // Tsonga → South Africa
+  tt: 'ru', // Tatar → Russia
+  tw: 'gh', // Twi → Ghana
+  ty: 'pf', // Tahitian → French Polynesia
+  ug: 'cn', // Uyghur → China
+  ve: 'za', // Venda → South Africa
+  wa: 'be', // Walloon → Belgium
+  wo: 'sn', // Wolof → Senegal
+  xh: 'za', // Xhosa → South Africa
+  yi: 'ua', // Yiddish → Ukraine
+  yo: 'ng', // Yoruba → Nigeria
+  za: 'cn', // Zhuang → China
+  zu: 'za', // Zulu → South Africa
 };
 
 export function getCountryCodeFromLangCode(lang: SupportedLanguage) {
@@ -98,6 +235,31 @@ export abstract class I18nBase<O extends I18nBaseOptions = I18nBaseOptions> exte
 
   abstract getCategoryTranslations(category: string, lang: string): Promise<Record<string, string>>;
 
+  // languages translations are written for: strings in source language are the keys themselves
+  targetLanguages(): SupportedLanguage[] {
+    return this.options.supportedLanguages.filter((lang) => lang !== SOURCE_LANGUAGE);
+  }
+
+  // empty translation means "not translated yet", original string is shown instead
+  fallbackToOriginal(messages: Record<string, string>): Record<string, string> {
+    return Object.fromEntries(Object.entries(messages).map(([key, value]) => [key, value || key]));
+  }
+
+  /**
+   * Translates backend strings (menu, resource labels, errors) with adminforth.tr,
+   * subclass provides only translation lookup in its storage for already resolved language
+   */
+  installBackendTranslator(adminforth: IAdminForth, lookup: (msg: string, category: string, lang: string) => Promise<string | undefined>) {
+    adminforth.tr = async (msg, category, lang, params, pluralizationNumber) => {
+      if (!msg) {
+        return msg;
+      }
+      const resolvedLang = this.resolveLanguage(lang);
+      const translation = await lookup(msg, category, resolvedLang);
+      return this.formatTranslation(msg, translation || msg, resolvedLang, params, pluralizationNumber);
+    };
+  }
+
   // validate each supported language: ISO 639-1 or BCP-47 with region (e.g., en-GB)
   validateSupportedLanguages() {
     this.options.supportedLanguages.forEach((lang) => {
@@ -118,6 +280,7 @@ export abstract class I18nBase<O extends I18nBaseOptions = I18nBaseOptions> exte
           code: lang,
           // lang name on on language native name
           name: iso6391.getNativeName(getPrimaryLanguageCode(lang)),
+          countryCode: getCountryCodeFromLangCode(lang),
         }
       ))
     };
