@@ -22,7 +22,7 @@
         </span>
         <div class="flex items-center gap-2 shrink-0">
           <span class="flag-icon"
-            :class="`flag-icon-${getCountryCodeFromLangCode(task.state?.lang)}`"
+            :class="`flag-icon-${task.state?.countryCode}`"
           ></span>
           <component
             :is="getCustomComponent({file: '@@/plugins/BackgroundJobsPlugin/StateToIcon.vue'})"
@@ -61,7 +61,6 @@
 import { useI18n } from 'vue-i18n'
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import websocket from '@/websocket';
-import { getCountryCodeFromLangCode } from './langCommon';
 import { getCustomComponent } from '@/utils';
 import { Button, Spinner } from '@/afcl';
 import { IconAngleLeftOutline, IconAngleRightOutline } from '@iconify-prerendered/vue-flowbite';
@@ -106,7 +105,7 @@ async function loadPage(targetPage: number) {
   try {
     for (let retry = 0; retry < retries; retry++) {
       try {
-        const res = await props.getJobTasks(PAGE_SIZE, targetPage * PAGE_SIZE, ['lang', 'error', 'taskName', 'failedToTranslate']);
+        const res = await props.getJobTasks(PAGE_SIZE, targetPage * PAGE_SIZE, ['lang', 'countryCode', 'error', 'taskName', 'failedToTranslate']);
         if (res && res.length > 0) {
           translationTasks.value = res;
           page.value = targetPage;

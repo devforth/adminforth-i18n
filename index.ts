@@ -1,7 +1,7 @@
 import AdminForth, { Filters, suggestIfTypo, AdminForthDataTypes, RAMLock, filtersTools, AdminForthFilterOperators } from "adminforth";
 import type { IAdminForth, IHttpServer, AdminForthComponentDeclaration, AdminForthResourceColumn, AdminForthResource, BeforeLoginConfirmationFunction, AdminForthConfigMenuItem, AdminUser } from "adminforth";
 import type { PluginOptions, SupportedLanguage } from './types.js';
-import { I18nBase, getPrimaryLanguageCode, requiresSlavicPlurals, SLAVIC_PLURAL_EXAMPLES } from './base.js';
+import { I18nBase, getCountryCodeFromLangCode, getPrimaryLanguageCode, requiresSlavicPlurals, SLAVIC_PLURAL_EXAMPLES, SLAVIC_PLURAL_FORMS, SLAVIC_PLURAL_FORMS_HINT, SOURCE_LANGUAGE } from './base.js';
 import { z } from "zod";
 import iso6391 from 'iso-639-1';
 
@@ -100,19 +100,28 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
     this.trFieldNames = {};
   }
 
-  async computeCompletedFieldValue(record: any) {
-    return this.options.supportedLanguages.reduce((acc: string, lang: SupportedLanguage): string => {
-      if (lang === 'en') {
-        return acc;
-      }
-      if (record[this.trFieldNames[lang]]) {
-        if (acc !== '') {
-          acc += '|';
-        }
-        acc += (lang as string);
-      }
-      return acc;
-    }, '');
+  // translated languages joined by '|', e.g. 'uk|ja', stored in completedFieldName to filter not fully translated strings
+  completedLangsValue(isTranslated: (lang: SupportedLanguage) => boolean): string {
+    return this.targetLanguages().filter(isTranslated).join('|');
+  }
+
+  computeCompletedFieldValue(record: any): string {
+    return this.completedLangsValue((lang) => Boolean(record[this.trFieldNames[lang]]));
+  }
+
+  // all translations of category for frontend_messages
+  categoryCacheKey(category: string, lang: string): string {
+    return `${this.resourceConfig.resourceId}:${category}:${lang}`;
+  }
+
+  // one string translated by backend tr
+  messageCacheKey(category: string, lang: string, enString: string): string {
+    return `${this.categoryCacheKey(category, lang)}:${enString}`;
+  }
+
+  clearTranslationCache(category: string, lang: string, enString: string) {
+    this.cache.clear(this.categoryCacheKey(category, lang));
+    this.cache.clear(this.messageCacheKey(category, lang, enString));
   }
 
   async updateUntranslatedMenuBadge() {
@@ -157,10 +166,7 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
     }
 
     // parse trFieldNames
-    for (const lang of this.options.supportedLanguages) {
-      if (lang === 'en') {
-        continue;
-      }
+    for (const lang of this.targetLanguages()) {
       if (this.options.translationFieldNames?.[lang]) {
         this.trFieldNames[lang] = this.options.translationFieldNames[lang];
       } else {
@@ -195,18 +201,9 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
       };
     }
 
-    this.enFieldName = this.trFieldNames['en'] || 'en_string';
+    this.enFieldName = this.trFieldNames[SOURCE_LANGUAGE] || `${SOURCE_LANGUAGE}_string`;
 
-    this.fullCompleatedFieldValue = this.options.supportedLanguages.reduce((acc: string, lang: SupportedLanguage) => {
-      if (lang === 'en') {
-        return acc;
-      }
-      if (acc !== '') {
-        acc += '|';
-      }
-      acc += lang as string;
-      return acc;
-    }, '');
+    this.fullCompleatedFieldValue = this.completedLangsValue(() => true);
 
     // if not enFieldName column is not found, throw error
     const enColumn = resourceConfig.columns.find(c => c.name === this.enFieldName);
@@ -282,10 +279,7 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
 
     // add hook to validate user did not screw up with template params
     resourceConfig.hooks.edit.beforeSave.push(async ({ updates, oldRecord }: { updates: any, oldRecord?: any }): Promise<{ ok: boolean, error?: string }> => {
-      for (const lang of this.options.supportedLanguages) {
-        if (lang === 'en') {
-          continue;
-        }
+      for (const lang of this.targetLanguages()) {
         if (updates[this.trFieldNames[lang]]) {  // if user set '', it will have '' in updates, then it is fine, we shoudl nto check it
           if (!ensureTemplateHasAllParams(oldRecord[this.enFieldName], updates[this.trFieldNames[lang]])) {
             return { ok: false, error: `Template params mismatch for ${updates[this.enFieldName]}. Template param names should be the same as in original string. E. g. 'Hello {name}', should be 'Hola {name}' and not 'Hola {nombre}'!` };
@@ -299,20 +293,11 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
     resourceConfig.hooks.edit.afterSave.push(async ({ updates, oldRecord }: { updates: any, oldRecord?: any }): Promise<{ ok: boolean, error?: string }> => {
       if (oldRecord) {
         // find lang which changed
-        let langsChanged: SupportedLanguage[] = [];
-        for (const lang of this.options.supportedLanguages) {
-          if (lang === 'en') {
-            continue;
-          }
-          if (updates[this.trFieldNames[lang]] !== undefined) {
-            langsChanged.push(lang);
-          }
-        }
-        
+        const langsChanged = this.targetLanguages().filter((lang) => updates[this.trFieldNames[lang]] !== undefined);
+
         // clear frontend cache for all langsChanged
         for (const lang of langsChanged) {
-          this.cache.clear(`${this.resourceConfig.resourceId}:${oldRecord[this.options.categoryFieldName]}:${lang}`);
-          this.cache.clear(`${this.resourceConfig.resourceId}:${oldRecord[this.options.categoryFieldName]}:${lang}:${oldRecord[this.enFieldName]}`);
+          this.clearTranslationCache(oldRecord[this.options.categoryFieldName], lang, oldRecord[this.enFieldName]);
         }
         this.updateUntranslatedMenuBadge();
       }
@@ -323,9 +308,7 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
     // add hook on delete of any translation to reset cache
     resourceConfig.hooks.delete.afterSave.push(async ({ record }: { record: any }): Promise<{ ok: boolean, error?: string }> => {
       for (const lang of this.options.supportedLanguages) {
-        // if frontend, clear frontend cache
-        this.cache.clear(`${this.resourceConfig.resourceId}:${record[this.options.categoryFieldName]}:${lang}`);
-        this.cache.clear(`${this.resourceConfig.resourceId}:${record[this.options.categoryFieldName]}:${lang}:${record[this.enFieldName]}`);
+        this.clearTranslationCache(record[this.options.categoryFieldName], lang, record[this.enFieldName]);
       }
       this.updateUntranslatedMenuBadge();
       return { ok: true };
@@ -394,6 +377,7 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
       file: this.componentPath('BulkActionButton.vue'),
       meta: {
         supportedLanguages: this.options.supportedLanguages,
+        countryCodes: Object.fromEntries(this.options.supportedLanguages.map((lang) => [lang, getCountryCodeFromLangCode(lang)])),
         pluginInstanceId: this.pluginInstanceId,
       }
     }
@@ -576,13 +560,8 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
     
 
     for (const lang of langsInvolved) {
-      const categoriesInvolved = new Set();
       for (const { enStr, category } of Object.values(updateStrings)) {
-        categoriesInvolved.add(category);
-        await this.cache.clear(`${this.resourceConfig.resourceId}:${category}:${lang}:${enStr}`);
-      }
-      for (const category of categoriesInvolved) {
-        await this.cache.clear(`${this.resourceConfig.resourceId}:${category}:${lang}`);
+        this.clearTranslationCache(category, lang, enStr);
       }
     }
 
@@ -658,7 +637,7 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
 
       
       ${region ? `Use the regional conventions for ${langCode} (region ${region}), including spelling, punctuation, and formatting.` : ''}
-      ${requestSlavicPlurals ? `You should provide 4 slavic forms (in format "zero count | singular count | 2-4 | 5+") e.g. "apple | apples" should become "${SLAVIC_PLURAL_EXAMPLES[primaryLang]}"` : ''}
+      ${requestSlavicPlurals ? `You should provide ${SLAVIC_PLURAL_FORMS} slavic forms (in format "${SLAVIC_PLURAL_FORMS_HINT}") e.g. "apple | apples" should become "${SLAVIC_PLURAL_EXAMPLES[primaryLang]}"` : ''}
       JSON keys are internal identifiers. Keep keys as is and write translations into values. If values have variables (in curly brackets), then translated strings should have them as well (variables itself should not be translated). Here are the strings:
       \`\`\`json
       {
@@ -737,6 +716,7 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
             translations: translations.filter(t => stringBanchCopy.includes(t.en_string)),
             updateStrings,
             lang,
+            countryCode: getCountryCodeFromLangCode(lang as SupportedLanguage),
             failedToTranslate,
             needToTranslateByLang,
             promptCost: basePromptTokenLength + banchTokens,
@@ -771,8 +751,8 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
     const translations = await this.adminforth.resource(this.resourceConfig.resourceId).list(Filters.IN(this.primaryKeyFieldName, selectedIds));
     const languagesToProcess = selectedLanguages || this.options.supportedLanguages;
     for (const lang of languagesToProcess) {
-      if (lang === 'en') {
-        // all strings are in English, no need to translate
+      if (lang === SOURCE_LANGUAGE) {
+        // all strings are in source language, no need to translate
         continue;
       }
       for (const translation of translations) {
@@ -954,10 +934,7 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
       this.options.completeAdapter.validate();
     }
 
-    for (const lang of this.options.supportedLanguages) {
-      if (lang === 'en') {
-        continue;
-      }
+    for (const lang of this.targetLanguages()) {
       const column = resourceConfig.columns.find(c => c.name === this.trFieldNames[lang]);
       if (!column) {
         throw new Error(`Field ${this.trFieldNames[lang]} not found for storing translation for language ${lang}
@@ -997,69 +974,47 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
     if (!this.externalAppOnly) {
       this.tryProcessAndWatch(adminforth);
 
-      adminforth.tr = async (msg: string | null | undefined, category: string, lang: string, params, pluralizationNumber: number): Promise<string> => {
-        if (!msg) {
-          return msg;
-        }
-
+      this.installBackendTranslator(adminforth, async (msg, category, lang) => {
         if (category === 'frontend') {
           throw new Error(`Category 'frontend' is reserved for frontend messages, use any other category for backend messages`);
         }
-        // console.log('🪲tr', msg, category, lang);
 
-        lang = this.resolveLanguage(lang);
-
-        let result;
         // try to get translation from cache
-        const cacheKey = `${resourceConfig.resourceId}:${category}:${lang}:${msg}`;
+        const cacheKey = this.messageCacheKey(category, lang, msg);
         const cached = await this.cache.get(cacheKey);
         if (cached) {
-          result = cached;
+          return cached;
         }
-        if (!result) {
-          const resource = adminforth.resource(resourceConfig.resourceId);
-          const translation = await resource.get([Filters.EQ(this.enFieldName, msg), Filters.EQ(this.options.categoryFieldName, category)]);
-          if (!translation) {
-            await resource.create({
-              [this.enFieldName]: msg,
-              [this.options.categoryFieldName]: category,
-            });
-            this.updateUntranslatedMenuBadge();
-          }
+        const resource = adminforth.resource(resourceConfig.resourceId);
+        const translation = await resource.get([Filters.EQ(this.enFieldName, msg), Filters.EQ(this.options.categoryFieldName, category)]);
+        if (!translation) {
+          await resource.create({
+            [this.enFieldName]: msg,
+            [this.options.categoryFieldName]: category,
+          });
+          this.updateUntranslatedMenuBadge();
+        }
 
-          // do this check here, to faster register missing translations
-          // also not cache it - no sense to cache english strings
-          if (lang === 'en') {
-            // set to cache to return faster next time
-            result = msg;
-          } else {
-            result = translation?.[this.trFieldNames[lang]];
-            if (!result) {
-              // return english
-              result = msg;
-            }
-          }
-          // cache so even if key does not exist, we will not hit database
-          await this.cache.set(cacheKey, result);
-        }
-        return this.formatTranslation(msg, result, lang, params, pluralizationNumber);
-      }
+        // do this check here, to faster register missing translations
+        const result = lang === SOURCE_LANGUAGE ? msg : translation?.[this.trFieldNames[lang]] || msg;
+        // cache so even if key does not exist, we will not hit database
+        await this.cache.set(cacheKey, result);
+        return result;
+      });
     }
   }
 
   async getCategoryTranslations(category: string, lang: string): Promise<Record<string, string>> {
     const resource = this.adminforth.resource(this.resourceConfig.resourceId);
-    const cacheKey = `${this.resourceConfig.resourceId}:${category}:${lang}`;
+    const cacheKey = this.categoryCacheKey(category, lang);
     const cached = await this.cache.get(cacheKey);
     if (cached) {
       return cached;
     }
-    const translations = {};
     const allTranslations = await resource.list([Filters.EQ(this.options.categoryFieldName, category)]);
-    for (const tr of allTranslations) {
-      const translatedValue = tr[this.trFieldNames[lang]];
-      translations[tr[this.enFieldName]] = translatedValue || tr[this.enFieldName];
-    }
+    const translations = this.fallbackToOriginal(Object.fromEntries(
+      allTranslations.map((tr) => [tr[this.enFieldName], tr[this.trFieldNames[lang]]]),
+    ));
     await this.cache.set(cacheKey, translations);
     return translations;
   }
@@ -1268,5 +1223,5 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
 
 }
 
-export { I18nBase, getCountryCodeFromLangCode, getPrimaryLanguageCode, isValidSupportedLanguageTag, requiresSlavicPlurals, SOURCE_LANGUAGE, PLURAL_SEPARATOR, SLAVIC_PLURAL_FORMS } from './base.js';
+export { I18nBase, getCountryCodeFromLangCode, getPrimaryLanguageCode, isValidSupportedLanguageTag, requiresSlavicPlurals, SOURCE_LANGUAGE, PLURAL_SEPARATOR, SLAVIC_PLURAL_FORMS, SLAVIC_PLURAL_FORMS_HINT } from './base.js';
 export type { I18nBaseOptions, SupportedLanguage } from './types.js';

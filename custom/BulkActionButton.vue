@@ -41,7 +41,7 @@
         <div class="group hover:bg-gray-100 dark:hover:bg-gray-600 px-2 py-2 flex items-center cursor-pointer" v-for="(index, lang) in checkedLanguages" :key="lang" @click="toggleLanguage(lang)">
           <Checkbox v-model="checkedLanguages[lang]" /> 
           <span class="flag-icon mr-2"
-            :class="`flag-icon-${getCountryCodeFromLangCode(lang)}`"
+            :class="`flag-icon-${props.meta.countryCodes[lang]}`"
           ></span>
           <span class="group-hover:text-gray-900 text-gray-600 dark:text-white dark:group-hover:text-gray-200">{{ ISO6391.getName(lang.slice(0,2)) }} ({{ lang }})</span>
         </div>
@@ -58,7 +58,6 @@
   import { computed, onMounted, ref, onUnmounted } from 'vue';
   import { callAdminForthApi } from '@/utils';
   import { useAdminforth } from '@/adminforth';
-  import { getCountryCodeFromLangCode } from './langCommon';
   import { getName, overwrite } from 'country-list';
   import ISO6391 from 'iso-639-1';
   import 'flag-icon-css/css/flag-icons.min.css';
@@ -82,6 +81,7 @@
     adminUser: Record<string, any>;
     meta: {
       supportedLanguages: string[];
+      countryCodes: Record<string, string>;
       pluginInstanceId: string;
     };
     clearCheckboxes: () => void;

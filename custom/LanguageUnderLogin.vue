@@ -9,7 +9,7 @@
       <template #item="{ option }">
         <span class="mr-1">
           <span class="flag-icon"
-            :class="`flag-icon-${getCountryCodeFromLangCode(option.value)}`"
+            :class="`flag-icon-${option.countryCode}`"
           ></span> 
 
         </span>
@@ -19,7 +19,7 @@
       <template #selected-item="{option}">
         <span class="mr-1">
           <span class="flag-icon"
-            :class="`flag-icon-${getCountryCodeFromLangCode(option.value)}`"
+            :class="`flag-icon-${option.countryCode}`"
           ></span>
         </span>
         <span>{{ option.label }}</span>
@@ -31,7 +31,7 @@
 <script setup>
 import Select from '@/afcl/Select.vue';
 import 'flag-icon-css/css/flag-icons.min.css';
-import { setLang, getCountryCodeFromLangCode, getLocalLang } from './langCommon';
+import { setLang, getLocalLang, getLanguageOptions } from './langCommon';
 import { useCoreStore } from '@/stores/core';
 
 import { computed, ref, onMounted, watch } from 'vue';
@@ -52,15 +52,7 @@ watch(() => selectedLanguage.value, async (newVal) => {
 });
 
 
-const options = computed(() => {
-  return props.meta.supportedLanguages.map((lang) => {
-    const region = String(lang.code).split('-')[1]?.toUpperCase();
-    return {
-      value: lang.code,
-      label: region ? `${lang.name} (${region})` : lang.name,
-    };
-  });
-});
+const options = computed(() => getLanguageOptions(props.meta.supportedLanguages));
 
 onMounted(() => {
   selectedLanguage.value = getLocalLang(props.meta.supportedLanguages, props.meta.primaryLanguage);

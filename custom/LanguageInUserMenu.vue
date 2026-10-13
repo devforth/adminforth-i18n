@@ -10,7 +10,7 @@
       <div>
         <span class="mr-1">
           <span class="flag-icon"
-            :class="`flag-icon-${getCountryCodeFromLangCode(selectedOption.value)}`"
+            :class="`flag-icon-${selectedOption.countryCode}`"
           ></span>
         </span>
         <span>{{ selectedOption.label }}</span>
@@ -32,7 +32,7 @@
       >
         <span class="mr-1">
           <span class="flag-icon"
-            :class="`flag-icon-${getCountryCodeFromLangCode(option.value)}`"
+            :class="`flag-icon-${option.countryCode}`"
           ></span>
         </span>
         <span>{{ option.label }}</span>
@@ -48,7 +48,7 @@
 import 'flag-icon-css/css/flag-icons.min.css';
 import { IconCaretDownSolid } from '@iconify-prerendered/vue-flowbite';
 
-import { setLang, getCountryCodeFromLangCode, getLocalLang, setLocalLang } from './langCommon';
+import { setLang, getLocalLang, setLocalLang, getLanguageOptions } from './langCommon';
 
 import { computed, ref, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -68,15 +68,7 @@ function doChangeLang(lang) {
 }
 
 
-const options = computed(() => {
-  return props.meta.supportedLanguages.map((lang) => {
-    const region = String(lang.code).split('-')[1]?.toUpperCase();
-    return {
-      value: lang.code,
-      label: region ? `${lang.name} (${region})` : lang.name,
-    };
-  });
-});
+const options = computed(() => getLanguageOptions(props.meta.supportedLanguages));
 
 const selectedOption = computed(() => {
   const val = options.value.find((option) => option.value === selectedLanguage.value);

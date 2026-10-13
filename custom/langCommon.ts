@@ -65,31 +65,19 @@ export async function setLang({ setLocaleMessage, locale }: any, pluginInstanceI
     setLocalLang(langIso);
 }
 
-// only remap the country code for the languages where language code is different from the country code
-// don't include es: es, fr: fr, etc, only include the ones where language code is different from the country code
-const countryISO31661ByLangISO6391 = {
-    en: 'us', // English → United States
-    zh: 'cn', // Chinese → China
-    hi: 'in', // Hindi → India
-    ar: 'sa', // Arabic → Saudi Arabia
-    ko: 'kr', // Korean → South Korea
-    ja: 'jp', // Japanese → Japan
-    uk: 'ua', // Ukrainian → Ukraine
-    ur: 'pk', // Urdu → Pakistan
-    sr: 'rs', // Serbian → Serbia
-    da: 'dk' // Danish → Denmark
-};
-
-export function getCountryCodeFromLangCode(langCode) {
-    const [primary, region] = String(langCode).split('-');
-    if (region && /^[A-Za-z]{2}$/.test(region)) {
-        return region.toLowerCase();
-    }
-    return countryISO31661ByLangISO6391[primary] || primary;
-}
-
-
 const LS_LANG_KEY = `afLanguage`;
+
+// options for language selectors, region of BCP-47 tag is added to native language name, e.g. "Português (BR)"
+export function getLanguageOptions(supportedLanguages: { code: string, name: string, countryCode: string }[]) {
+    return supportedLanguages.map((lang) => {
+        const region = String(lang.code).split('-')[1]?.toUpperCase();
+        return {
+            value: lang.code,
+            countryCode: lang.countryCode,
+            label: region ? `${lang.name} (${region})` : lang.name,
+        };
+    });
+}
 
 export function getLocalLang(supportedLanguages: {code}[], primaryLanguage?: SupportedLanguage): string {
     let lsLang = localStorage.getItem(LS_LANG_KEY);
