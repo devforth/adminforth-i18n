@@ -1,4 +1,4 @@
-import AdminForth, { Filters, suggestIfTypo, AdminForthDataTypes, RAMLock, filtersTools, AdminForthFilterOperators } from "adminforth";
+import AdminForth, { Filters, suggestIfTypo, AdminForthDataTypes, RAMLock, filtersTools, AdminForthFilterOperators, interpretResource, ActionCheckSource, AllowedActionsEnum } from "adminforth";
 import type { IAdminForth, IHttpServer, AdminForthComponentDeclaration, AdminForthResourceColumn, AdminForthResource, BeforeLoginConfirmationFunction, AdminForthConfigMenuItem, AdminUser } from "adminforth";
 import type { PluginOptions, SupportedLanguage } from './types.js';
 import { I18nBase, getCountryCodeFromLangCode, getPrimaryLanguageCode, requiresSlavicPlurals, SLAVIC_PLURAL_EXAMPLES, SLAVIC_PLURAL_FORMS, SLAVIC_PLURAL_FORMS_HINT, SOURCE_LANGUAGE } from './base.js';
@@ -1108,6 +1108,19 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
             }
             oldValue[field] = reviewed;
             updateRecord[this.options.reviewedCheckboxesFieldName] = { ...oldValue };
+          }
+
+          const { allowedActions } = await interpretResource(
+            adminUser,
+            resource,
+            { requestBody: body, newRecord: updateRecord, oldRecord, pk: recordId },
+            ActionCheckSource.EditRequest,
+            this.adminforth
+          );
+          const editAllowed = allowedActions[AllowedActionsEnum.edit];
+          if (editAllowed !== true) {
+            result = { error: typeof editAllowed === 'string' ? editAllowed : 'You do not have permission to edit this record' };
+            return;
           }
 
           result = await this.adminforth.updateResourceRecord({
