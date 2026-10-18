@@ -41,7 +41,7 @@ export async function setLang({ setLocaleMessage, locale }: any, pluginInstanceI
 
     // set dayjs locale
     try {
-        await dayjsLocales[langIso];
+        await dayjsLocales[langIso]();
         dayjs.locale(langIso);
     } catch {
         dayjs.locale('en');
@@ -49,10 +49,10 @@ export async function setLang({ setLocaleMessage, locale }: any, pluginInstanceI
 
     // set datepicker locale
     if (datepickerLocales[langIso]) {
-        Datepicker.locales[langIso] = (await datepickerLocales[langIso]).default[langIso];
+        Datepicker.locales[langIso] = (await datepickerLocales[langIso]()).default[langIso];
     } else if (Object.keys(datepickerLocales).some((l) => l.startsWith(`${langIso}-`)) && langIso !== 'en') {
         const lang = Object.keys(datepickerLocales).find((l) => l.startsWith(`${langIso}-`));
-        Datepicker.locales[langIso] = (await datepickerLocales[lang]).default[lang];
+        Datepicker.locales[langIso] = (await datepickerLocales[lang]()).default[lang];
     }
     
     // set locale and locale message
