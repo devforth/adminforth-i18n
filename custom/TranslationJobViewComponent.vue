@@ -21,7 +21,7 @@
           {{  task.state?.taskName }} to
         </span>
         <div class="flex items-center gap-2 shrink-0">
-          <LanguageFlag :countryCode="task.state?.countryCode" />
+          <CountryFlag size="sm" :countryCode="task.state?.countryCode" />
           <component
             :is="getCustomComponent({file: '@@/plugins/BackgroundJobsPlugin/StateToIcon.vue'})"
             :status="task.status"
@@ -62,9 +62,8 @@ import { useI18n } from 'vue-i18n'
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import websocket from '@/websocket';
 import { getCustomComponent } from '@/utils';
-import { Button, Spinner } from '@/afcl';
+import { Button, CountryFlag, Spinner } from '@/afcl';
 import { IconChevronLeft, IconChevronRight } from '@iconify-prerendered/vue-lucide';
-import LanguageFlag from './LanguageFlag.vue';
 
 const { t } = useI18n();
 

@@ -8,14 +8,14 @@
     >
       <template #item="{ option }">
         <span class="flex items-center gap-2">
-          <LanguageFlag :countryCode="option.countryCode" />
+          <CountryFlag size="sm" :countryCode="option.countryCode" />
           {{ option.label }}
         </span>
       </template>
 
       <template #selected-item="{ option }">
         <span class="flex items-center gap-2">
-          <LanguageFlag :countryCode="option.countryCode" />
+          <CountryFlag size="sm" :countryCode="option.countryCode" />
           {{ option.label }}
         </span>
       </template>
@@ -24,8 +24,7 @@
 </template>
 
 <script setup>
-import Select from '@/afcl/Select.vue';
-import LanguageFlag from './LanguageFlag.vue';
+import { CountryFlag, Select } from '@/afcl';
 import { setLang, getLocalLang, getLanguageOptions } from './langCommon';
 import { useCoreStore } from '@/stores/core';
 

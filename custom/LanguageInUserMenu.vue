@@ -1,7 +1,7 @@
 <template>
   <DropdownMenuAccordion class="af-language-in-user-menu" :label="selectedOption.label" :triggerClass="USER_MENU_ITEM_CLASSES">
     <template #icon>
-      <LanguageFlag :countryCode="selectedOption.countryCode" />
+      <CountryFlag size="sm" :countryCode="selectedOption.countryCode" />
     </template>
     <DropdownMenuItem
       v-for="option in options.filter((opt) => opt.value !== selectedOption.value)"
@@ -10,7 +10,7 @@
       @click="doChangeLang(option.value)"
     >
       <template #icon>
-        <LanguageFlag :countryCode="option.countryCode" />
+        <CountryFlag size="sm" :countryCode="option.countryCode" />
       </template>
       {{ option.label }}
     </DropdownMenuItem>
@@ -18,9 +18,8 @@
 </template>
 
 <script setup>
-import { DropdownMenuAccordion, DropdownMenuItem } from '@/afcl';
 import { USER_MENU_ITEM_CLASSES } from '@/utils/userMenu';
-import LanguageFlag from './LanguageFlag.vue';
+import { CountryFlag, DropdownMenuAccordion, DropdownMenuItem } from '@/afcl';
 
 import { setLang, getLocalLang, setLocalLang, getLanguageOptions } from './langCommon';
 

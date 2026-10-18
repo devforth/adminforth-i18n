@@ -38,7 +38,7 @@
       <div class="col-span-2 grid grid-cols-3 gap-x-2 gap-y-3 mt-4">
         <Checkbox v-for="(index, lang) in checkedLanguages" :key="lang" v-model="checkedLanguages[lang]">
           <span class="flex items-center gap-2">
-            <LanguageFlag :countryCode="props.meta.countryCodes[lang]" />
+            <CountryFlag size="sm" :countryCode="props.meta.countryCodes[lang]" />
             {{ ISO6391.getName(lang.slice(0,2)) }} ({{ lang }})
           </span>
         </Checkbox>
@@ -51,13 +51,12 @@
 <script setup lang="ts">
   import { IconLanguages } from '@iconify-prerendered/vue-lucide';
   import { useI18n } from 'vue-i18n';
-  import { Dialog, Button, Checkbox, Spinner } from '@/afcl';
+  import { Dialog, Button, Checkbox, CountryFlag, Spinner } from '@/afcl';
   import { computed, onMounted, ref, onUnmounted } from 'vue';
   import { callAdminForthApi } from '@/utils';
   import { useAdminforth } from '@/adminforth';
   import { getName, overwrite } from 'country-list';
   import ISO6391 from 'iso-639-1';
-  import LanguageFlag from './LanguageFlag.vue';
   import websocket from '@/websocket';
   import { useFiltersStore } from '@/stores/filters';
   import { useBackgroundJobApi } from '@/custom/plugins/BackgroundJobsPlugin/useBackgroundJobApi.ts';
