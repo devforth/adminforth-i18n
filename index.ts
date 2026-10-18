@@ -880,6 +880,7 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
           translations?: any[],
           updateStrings?: Record<string, { updates: any, category: string, strId: string, enStr: string, translatedStr: string }>,
           lang?: string,
+          countryCode?: string,
           failedToTranslate?: IFailedTranslation[],
           needToTranslateByLang?: Record<string, any>,
           promptCost?: number,
@@ -901,9 +902,11 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
         }
         afLogger.debug(`Translation task for language ${initialState.lang} completed.`);
 
+        // the task details view shows the flag of the language from this state
         const stateToSave = {
           taskName: initialState.taskName,
           lang: initialState.lang,
+          countryCode: initialState.countryCode,
           failedToTranslate: initialState.failedToTranslate,
         }
         await setTaskStateField(stateToSave);
