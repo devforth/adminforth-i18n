@@ -1,24 +1,22 @@
 <template>
-  <Input 
+  <Input
     ref="input"
     v-if="shortValue"
-    class="w-full"
+    type="text"
+    fullWidth
     :modelValue="props.record[props.column.name]"
-    :disabled="props.column.editReadonly"
+    :readonly="props.column.editReadonly"
     @update:modelValue="($event) => emit('update:value', $event)" />
-  <textarea 
+  <Textarea
     v-else
     ref="textarea"
-    :disabled="props.column.editReadonly"
-    class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5
-      dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white focus:ring-lightPrimary focus:border-lightPrimary dark:focus:ring-darkPrimary dark:focus:border-darkPrimary"
-    :value="props.record[props.column.name]" 
-    @input="($event) => { autoResizeTextArea(); emit('update:value', $event.target.value) }" />
-
+    :modelValue="props.record[props.column.name]"
+    :readonly="props.column.editReadonly"
+    @update:modelValue="($event) => { autoResizeTextArea(); emit('update:value', $event) }" />
 </template>
 
 <script setup lang="ts">
-import { Input } from "@/afcl";
+import { Input, Textarea } from "@/afcl";
 import type {
   AdminForthResourceColumnCommon,
   AdminForthResourceCommon,
@@ -38,8 +36,8 @@ const props = defineProps<{
 
 const emit = defineEmits(["update:value"]);
 
-const input: Ref<HTMLInputElement | HTMLTextAreaElement | null> = ref(null);
-const textarea: Ref<HTMLInputElement | HTMLTextAreaElement | null> = ref(null);
+const input = ref<InstanceType<typeof Input> | null>(null);
+const textarea = ref<InstanceType<typeof Textarea> | null>(null);
 
 // Auto resize function
 const autoResizeTextArea = () => {
@@ -47,10 +45,12 @@ const autoResizeTextArea = () => {
   nextTick(() => {
     if (!textarea.value) return
 
+    // the textarea is the root element of AFCL Textarea
+    const el = textarea.value.$el as HTMLTextAreaElement
     // Reset the height to shrink if content is removed
-    textarea.value.style.height = 'auto'
+    el.style.height = 'auto'
     // Set it to the scrollHeight to make it grow
-    textarea.value.style.height = textarea.value.scrollHeight + 3 + 'px'
+    el.style.height = el.scrollHeight + 3 + 'px'
   })
 }
 

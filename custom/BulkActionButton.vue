@@ -4,47 +4,44 @@
     class="w-[600px]"
     :buttons="[
       { 
-        label: 'Translate', 
+        label: t('Close'),
+        options: {
+          variant: 'secondary'
+        }, 
+        onclick: (dialog) => dialog.hide() 
+      },
+      { 
+        label: t('Translate'),
         onclick: async (dialog) => { await runTranslation(); dialog.hide(); } ,
         options: {
           disabled: noneChecked 
         }
       },
-      { 
-        label: 'Close',          
-        options: {
-          class: 'bg-white hover:!bg-gray-100 !text-gray-900 hover:!text-gray-800 dark:!bg-gray-800 dark:!text-gray-100 dark:hover:!bg-gray-700 !border-gray-200 dark:!border-gray-600'
-        }, 
-        onclick: (dialog) => dialog.hide() 
-      },
     ]"
   >
     <template #trigger>
-      <button class="flex items-center justify-center w-full">
-        <IconLanguageOutline class="text-gray-500 dark:text-gray-400 w-5 h-5" />
-        <div class="flex items-end justify-start gap-2 cursor-pointer">
-          <p class="text-justify max-h-[18px] truncate max-w-[60vw] md:max-w-none">{{props.checkboxes.length === 0 ? t('Translate filtered') : t('Translate selected ({count})', { count: props.checkboxes.length })}}</p>
-            <div class="flex items-center justify-center text-white bg-gradient-to-r h-[18px] from-purple-500 via-purple-600 to-purple-700 hover:bg-gradient-to-br focus:ring-4 focus:outline-none focus:ring-purple-300 dark:focus:ring-purple-800 font-medium rounded-md text-sm px-1 text-center">
-            {{t('AI')}}
-          </div>
-        </div>
-      </button>
+      <span class="flex items-center gap-2">
+        <IconLanguages class="w-4 h-4 shrink-0 text-lightInputIconColor dark:text-darkInputIconColor" aria-hidden="true" />
+        <span class="truncate max-w-[60vw] md:max-w-none">{{props.checkboxes.length === 0 ? t('Translate filtered') : t('Translate selected ({count})', { count: props.checkboxes.length })}}</span>
+        <span class="inline-flex items-center h-[1.125rem] px-1.5 rounded-full border border-lightPrimary/30 bg-lightPrimary/10 text-lightPrimary text-[11px] font-semibold dark:border-darkPrimary/40 dark:bg-darkPrimary/15 dark:text-darkPrimary">
+          {{t('AI')}}
+        </span>
+      </span>
     </template>
 
-    <div class="af-i18n-translations-selector grid grid-cols-2 gap-1 w-full">
+    <div class="af-i18n-translations-selector relative grid grid-cols-2 gap-2 w-full">
       <div v-if="isLoading" class="top-0 left-0 z-10 absolute bg-black/30 w-full h-full rounded-lg flex items-center justify-center">
         <Spinner class="w-10 h-10" />
       </div>
-      <Button @click="selectAll" :disabled="allChecked">{{ t('Select All') }}</Button>
-      <Button @click="uncheckAll" :disabled="noneChecked">{{ t('Uncheck All') }}</Button>
-      <div class="col-span-2 grid grid-cols-3 gap-1 mt-4">
-        <div class="group hover:bg-gray-100 dark:hover:bg-gray-600 px-2 py-2 flex items-center cursor-pointer" v-for="(index, lang) in checkedLanguages" :key="lang" @click="toggleLanguage(lang)">
-          <Checkbox v-model="checkedLanguages[lang]" /> 
-          <span class="flag-icon mr-2"
-            :class="`flag-icon-${props.meta.countryCodes[lang]}`"
-          ></span>
-          <span class="group-hover:text-gray-900 text-gray-600 dark:text-white dark:group-hover:text-gray-200">{{ ISO6391.getName(lang.slice(0,2)) }} ({{ lang }})</span>
-        </div>
+      <Button variant="secondary" @click="selectAll" :disabled="allChecked">{{ t('Select All') }}</Button>
+      <Button variant="secondary" @click="uncheckAll" :disabled="noneChecked">{{ t('Uncheck All') }}</Button>
+      <div class="col-span-2 grid grid-cols-3 gap-x-2 gap-y-3 mt-4">
+        <Checkbox v-for="(index, lang) in checkedLanguages" :key="lang" v-model="checkedLanguages[lang]">
+          <span class="flex items-center gap-2">
+            <LanguageFlag :countryCode="props.meta.countryCodes[lang]" />
+            {{ ISO6391.getName(lang.slice(0,2)) }} ({{ lang }})
+          </span>
+        </Checkbox>
       </div>
     </div>
 </Dialog>
@@ -52,7 +49,7 @@
 </template>
 
 <script setup lang="ts">
-  import { IconLanguageOutline } from '@iconify-prerendered/vue-flowbite';
+  import { IconLanguages } from '@iconify-prerendered/vue-lucide';
   import { useI18n } from 'vue-i18n';
   import { Dialog, Button, Checkbox, Spinner } from '@/afcl';
   import { computed, onMounted, ref, onUnmounted } from 'vue';
@@ -60,7 +57,7 @@
   import { useAdminforth } from '@/adminforth';
   import { getName, overwrite } from 'country-list';
   import ISO6391 from 'iso-639-1';
-  import 'flag-icon-css/css/flag-icons.min.css';
+  import LanguageFlag from './LanguageFlag.vue';
   import websocket from '@/websocket';
   import { useFiltersStore } from '@/stores/filters';
   import { useBackgroundJobApi } from '@/custom/plugins/BackgroundJobsPlugin/useBackgroundJobApi.ts';
@@ -125,10 +122,6 @@
     for (const lang of props.meta.supportedLanguages) {
       checkedLanguages.value[lang] = false;
     }
-  }
-
-  function toggleLanguage(lang: string) {
-    checkedLanguages.value[lang] = !checkedLanguages.value[lang];
   }
 
   async function runTranslation() {

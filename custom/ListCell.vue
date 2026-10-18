@@ -15,24 +15,27 @@
           <template #tooltip>
               {{ record[meta?.reviewedCheckboxesFieldName]?.[props.column.name] ? t('Translation is reviewed') : t('Translation is not reviewed') }}
           </template> 
-          <IconCheckOutline 
+          <IconCircleCheck
             v-if="record[meta?.reviewedCheckboxesFieldName]?.[props.column.name]"
-            class="w-5 h-5 text-green-500"
+            class="w-4 h-4 text-lightSuccess dark:text-darkSuccess"
           />
-          <IconQuestionCircleSolid 
+          <IconCircleHelp
             v-else
-            class="w-5 h-5 text-yellow-500"
+            class="w-4 h-4 text-lightWarning dark:text-darkWarning"
           />
         </Tooltip>
       </span>
 
-      <button 
+      <Button
         v-if="!column.editReadonly"
         @click="startEdit"
-        class="ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
+        variant="ghost"
+        size="sm"
+        iconOnly
+        class="ml-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition"
       >
-        <IconPenSolid class="w-5 h-5 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"/>
-      </button>
+        <IconPencil />
+      </Button>
     </div>
 
     <!-- Edit mode -->
@@ -53,31 +56,31 @@
           :setCurrentValue="setCurrentValue"
         />
         <div class="flex gap-1">
-          <button 
+          <Button
             @click="saveEdit"
             :disabled="saving || (originalReviewed === reviewed && originalValue === currentValues[props.column.name])"
-            class="text-green-600 hover:text-green-700 dark:text-green-500 dark:hover:text-green-400 disabled:opacity-50"
-            
+            :loader="saving"
+            iconOnly
           >
-            <IconCheckOutline class="w-5 h-5" />
-          </button>
-          <button 
+            <IconCheck />
+          </Button>
+          <Button
             @click="cancelEdit"
             :disabled="saving"
-            class="text-red-600 hover:text-red-700 dark:text-red-500 dark:hover:text-red-400"
+            variant="secondary"
+            iconOnly
           >
-            <IconXOutline class="w-5 h-5" />
-          </button>
+            <IconX />
+          </Button>
         </div>
       </div>
       <div v-if="meta?.reviewedCheckboxesFieldName">
-        <label class="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-0 cursor-pointer select-none">
-          <Checkbox
-            v-model="reviewed"
-            :disabled="saving"
-          /> 
+        <Checkbox
+          v-model="reviewed"
+          :disabled="saving"
+        >
           {{ t('Translation is reviewed') }}
-        </label>
+        </Checkbox>
         
       </div>
     </div>
@@ -87,13 +90,12 @@
 
 <script setup lang="ts">
 import { ref, Ref, computed, nextTick, onMounted } from 'vue';
-import { IconPenSolid, IconCheckOutline, IconXOutline, IconQuestionCircleSolid } from '@iconify-prerendered/vue-flowbite';
+import { IconPencil, IconCheck, IconX, IconCircleCheck, IconCircleHelp } from '@iconify-prerendered/vue-lucide';
 import { callAdminForthApi } from '@/utils';
 import { showErrorTost, showSuccesTost } from '@/composables/useFrontendApi';
 import ColumnValueInputWrapper from '@/components/ColumnValueInputWrapper.vue';
 import { useI18n } from 'vue-i18n';
-import Tooltip from '@/afcl/Tooltip.vue';
-import Checkbox from '@/afcl/Checkbox.vue';
+import { Button, Checkbox, Tooltip } from '@/afcl';
 import { eventBus } from './eventBus'
 
 const listCell = ref(null);

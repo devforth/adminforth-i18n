@@ -1,5 +1,5 @@
 <template>
-  <p class="text-gray-500 dark:text-gray-400 font-sm text-left mt-3 flex items-center justify-center">
+  <div class="af-language-under-login mt-3">
     <Select
       class="w-full"
       v-model="selectedLanguage"
@@ -7,30 +7,25 @@
       :placeholder="$t('Select language')"
     >
       <template #item="{ option }">
-        <span class="mr-1">
-          <span class="flag-icon"
-            :class="`flag-icon-${option.countryCode}`"
-          ></span> 
-
+        <span class="flex items-center gap-2">
+          <LanguageFlag :countryCode="option.countryCode" />
+          {{ option.label }}
         </span>
-        <span>{{ option.label }}</span>
       </template>
 
-      <template #selected-item="{option}">
-        <span class="mr-1">
-          <span class="flag-icon"
-            :class="`flag-icon-${option.countryCode}`"
-          ></span>
+      <template #selected-item="{ option }">
+        <span class="flex items-center gap-2">
+          <LanguageFlag :countryCode="option.countryCode" />
+          {{ option.label }}
         </span>
-        <span>{{ option.label }}</span>
       </template>
     </Select>
-  </p>
+  </div>
 </template>
 
 <script setup>
 import Select from '@/afcl/Select.vue';
-import 'flag-icon-css/css/flag-icons.min.css';
+import LanguageFlag from './LanguageFlag.vue';
 import { setLang, getLocalLang, getLanguageOptions } from './langCommon';
 import { useCoreStore } from '@/stores/core';
 

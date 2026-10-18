@@ -2,18 +2,18 @@
 <template>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 my-3 mt-5">
       <div class="flex items-center space-x-1">
-        <span class="text-gray-600 dark:text-gray-300">{{ t('Total tokens will be used for translation:') }}</span>
-        <span class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ new Number(props.job.state?.totalTranslationTokenCost).toLocaleString() || 0 }}</span>
+        <span class="text-lightInputIconColor dark:text-darkInputIconColor">{{ t('Total tokens will be used for translation:') }}</span>
+        <span class="text-lg font-semibold tabular-nums text-lightInputText dark:text-darkInputText">{{ new Number(props.job.state?.totalTranslationTokenCost).toLocaleString() || 0 }}</span>
       </div>
       <div class="flex items-center space-x-1">
-        <span class="text-gray-600 dark:text-gray-300">{{ t('Total translation token used:') }}</span>
-        <span class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ new Number(props.job.state?.totalUsedTokens).toLocaleString() || 0 }}</span>
+        <span class="text-lightInputIconColor dark:text-darkInputIconColor">{{ t('Total translation token used:') }}</span>
+        <span class="text-lg font-semibold tabular-nums text-lightInputText dark:text-darkInputText">{{ new Number(props.job.state?.totalUsedTokens).toLocaleString() || 0 }}</span>
       </div>
     </div> 
     <div class="grid grid-cols-3 gap-2">
       <div 
         v-if="!isFetchingTasks"
-        class="bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 border-gray-200 dark:border-gray-700 transition-all px-2 py-2 rounded-md border max-w-64 w-full flex items-center justify-between gap-2" 
+        class="bg-lightSecondaryDarken border-lightTableBorder dark:bg-darkSecondaryLighten dark:border-darkTableBorder px-2 py-2 rounded-default border max-w-64 w-full flex items-center justify-between gap-2" 
         v-for="(task, index) in translationTasks" 
         :key="index"
       >
@@ -21,9 +21,7 @@
           {{  task.state?.taskName }} to
         </span>
         <div class="flex items-center gap-2 shrink-0">
-          <span class="flag-icon"
-            :class="`flag-icon-${task.state?.countryCode}`"
-          ></span>
+          <LanguageFlag :countryCode="task.state?.countryCode" />
           <component
             :is="getCustomComponent({file: '@@/plugins/BackgroundJobsPlugin/StateToIcon.vue'})"
             :status="task.status"
@@ -38,20 +36,22 @@
     <div v-if="page > 0 || hasNextPage" class="flex items-center justify-center gap-3 mt-4">
       <Button
         variant="secondary"
+        iconOnly
         :disabled="page === 0 || isFetchingTasks"
         @click="loadPage(page - 1)"
       >
-        <IconAngleLeftOutline class="w-4 h-4" />
+        <IconChevronLeft />
       </Button>
-      <span class="text-sm text-gray-600 dark:text-gray-300">
+      <span class="text-sm tabular-nums text-lightInputIconColor dark:text-darkInputIconColor">
         {{ t('Page {page}', { page: page + 1 }) }}
       </span>
       <Button
         variant="secondary"
+        iconOnly
         :disabled="!hasNextPage || isFetchingTasks"
         @click="loadPage(page + 1)"
       >
-        <IconAngleRightOutline class="w-4 h-4" />
+        <IconChevronRight />
       </Button>
     </div>
 </template>
@@ -63,7 +63,8 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import websocket from '@/websocket';
 import { getCustomComponent } from '@/utils';
 import { Button, Spinner } from '@/afcl';
-import { IconAngleLeftOutline, IconAngleRightOutline } from '@iconify-prerendered/vue-flowbite';
+import { IconChevronLeft, IconChevronRight } from '@iconify-prerendered/vue-lucide';
+import LanguageFlag from './LanguageFlag.vue';
 
 const { t } = useI18n();
 
