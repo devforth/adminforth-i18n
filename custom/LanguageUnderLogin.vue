@@ -40,6 +40,10 @@ const selectedLanguage = ref('');
 const coreStore = useCoreStore();
 
 watch(() => selectedLanguage.value, async (newVal) => {
+  // Select clears its value while the user types a search, the language stays until another one is picked
+  if (!newVal) {
+    return;
+  }
   await setLang({ setLocaleMessage, locale }, props.meta.pluginInstanceId, newVal);
   coreStore.getPublicConfig();
   coreStore.getLoginFormConfig();
