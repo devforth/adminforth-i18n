@@ -1071,6 +1071,7 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
     server.endpoint({
       method: 'POST',
       path: `/plugin/${this.pluginInstanceId}/update-field`,
+      agent: { hiddenFromAgents: true },
       request_schema: updateFieldBodySchema,
       handler: async ({ body, adminUser, headers, response }) => {
         const data = body as z.infer<typeof updateFieldBodySchema>;
@@ -1175,6 +1176,7 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
     server.endpoint({
       method: 'POST',
       path: `/plugin/${this.pluginInstanceId}/get_filtered_ids`,
+      agent: { hiddenFromAgents: true },
       request_schema: getFilteredIdsBodySchema,
       handler: async ({ body, adminUser, headers, query, cookies, requestUrl, response }) => {
         const resource = this.resourceConfig;
