@@ -1,4 +1,4 @@
-import AdminForth, { Filters, suggestIfTypo, AdminForthDataTypes, RAMLock, filtersTools, AdminForthFilterOperators, interpretResource, ActionCheckSource, AllowedActionsEnum } from "adminforth";
+import AdminForth, { Filters, suggestIfTypo, AdminForthDataTypes, RAMLock, filtersTools, AdminForthFilterOperators, interpretResource, ActionCheckSource, AllowedActionsEnum, rejectApiRawFilters } from "adminforth";
 import type { IAdminForth, IHttpServer, AdminForthComponentDeclaration, AdminForthResourceColumn, AdminForthResource, BeforeLoginConfirmationFunction, AdminForthConfigMenuItem, AdminUser } from "adminforth";
 import type { PluginOptions, SupportedLanguage } from './types.js';
 import { I18nBase, getCountryCodeFromLangCode, getPrimaryLanguageCode, requiresSlavicPlurals, SLAVIC_PLURAL_EXAMPLES, SLAVIC_PLURAL_FORMS, SLAVIC_PLURAL_FORMS_HINT, SOURCE_LANGUAGE } from './base.js';
@@ -1178,6 +1178,10 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
       request_schema: getFilteredIdsBodySchema,
       handler: async ({ body, adminUser, headers, query, cookies, requestUrl, response }) => {
         const resource = this.resourceConfig;
+        const rawFilterError = rejectApiRawFilters(body.filters);
+        if (rawFilterError) {
+          return rawFilterError;
+        }
 
         for (const hook of resource.hooks?.list?.beforeDatasourceRequest || []) {
           const filterTools = filtersTools.get(body);
