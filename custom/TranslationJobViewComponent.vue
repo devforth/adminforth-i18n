@@ -135,10 +135,12 @@ async function loadPage(targetPage: number) {
   }
 }
 
-onMounted(async () => {
-  await loadPage(0);
+let unsubscribeFromTaskUpdates: () => void;
+let unsubscribeFromTaskErrors: () => void;
 
-  websocket.subscribe(`/background-jobs-task-update/${props.job.id}`, (data: { taskIndex: number, status?: string, state?: Record<string, any> }) => {
+onMounted(async () => {
+  // subscribe before the first await, so onUnmounted always has something to unsubscribe
+  unsubscribeFromTaskUpdates = websocket.subscribe(`/background-jobs-task-update/${props.job.id}`, (data: { taskIndex: number, status?: string, state?: Record<string, any> }) => {
     const indexOnPage = data.taskIndex - currentOffset.value;
     if (indexOnPage >= 0 && indexOnPage < translationTasks.value.length) {
       if (data.state) {
@@ -149,15 +151,16 @@ onMounted(async () => {
       }
     }
   });
-  websocket.subscribe(`/background-jobs-task-error/${props.job.id}`, (data: { taskIndex: number, status?: string, state?: Record<string, any> }) => {
+  unsubscribeFromTaskErrors = websocket.subscribe(`/background-jobs-task-error/${props.job.id}`, (data: { taskIndex: number, status?: string, state?: Record<string, any> }) => {
     console.log('Error received for task', data);
   });
 
+  await loadPage(0);
 });
 
 onUnmounted(() => {
-  websocket.unsubscribe(`/background-jobs-task-update/${props.job.id}`);
-  websocket.unsubscribe(`/background-jobs-task-error/${props.job.id}`);
+  unsubscribeFromTaskUpdates();
+  unsubscribeFromTaskErrors();
 });
 
 

@@ -98,8 +98,10 @@
   const allChecked = computed(() => Object.values(checkedLanguages.value).every(Boolean));
   const noneChecked = computed(() => Object.values(checkedLanguages.value).every(value => !value));
 
+  let unsubscribeFromTranslationProgress: () => void;
+
   onMounted(() => {
-    websocket.subscribe('/translation_progress', (data) => {
+    unsubscribeFromTranslationProgress = websocket.subscribe('/translation_progress', (data) => {
       adminforth.list.refresh();
     });
     for (const lang of props.meta.supportedLanguages) {
@@ -108,7 +110,7 @@
   });
   
   onUnmounted( () => {
-      websocket.unsubscribe('/translation_progress');
+      unsubscribeFromTranslationProgress();
   } )
 
   function selectAll() {

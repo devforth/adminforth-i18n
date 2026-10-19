@@ -332,12 +332,12 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
       });
 
       // also add edit hook beforeSave to update completedFieldName
-      resourceConfig.hooks.edit.beforeSave.push(async ({ record, oldRecord }: { record: any, oldRecord: any }): Promise<{ ok: boolean, error?: string }> => {
-        const futureRecord = { ...oldRecord, ...record };
+      resourceConfig.hooks.edit.beforeSave.push(async ({ updates, oldRecord }: { updates: any, oldRecord: any }): Promise<{ ok: boolean, error?: string }> => {
+        const futureRecord = { ...oldRecord, ...updates };
         
         const futureCompletedFieldValue = await this.computeCompletedFieldValue(futureRecord);
     
-        record[this.options.completedFieldName] = futureCompletedFieldValue;
+        updates[this.options.completedFieldName] = futureCompletedFieldValue;
         return { ok: true };
       });
 
@@ -1129,7 +1129,7 @@ export default class I18nPlugin extends I18nBase<PluginOptions> {
           result = await this.adminforth.updateResourceRecord({
             resource,
             recordId,
-            record: updateRecord,
+            updates: updateRecord,
             oldRecord,
             adminUser
           });

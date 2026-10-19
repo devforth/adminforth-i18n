@@ -45,7 +45,7 @@ watch(() => selectedLanguage.value, async (newVal) => {
     return;
   }
   await setLang({ setLocaleMessage, locale }, props.meta.pluginInstanceId, newVal);
-  coreStore.getPublicConfig();
+  coreStore.fetchConfig({ redirectToLoginIfNotLoggedIn: false });
   coreStore.getLoginFormConfig();
 });
 
